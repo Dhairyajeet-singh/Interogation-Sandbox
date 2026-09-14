@@ -1,0 +1,39 @@
+{
+  "case_id": "ashfield_001",
+  "title": "Death at Ashfield House",
+
+  "dossier": "Case file. Dr Elena Marsh, astronomer, was found dead in the Ashfield House observatory on the night of 14 October. Cause of death: a single blow from a brass counterweight taken from the telescope mount. The counterweight had been wiped clean. Time of death was between 21:00 and 22:00. Rain began at 21:20. A wet umbrella was found in the east hall. A rectangular dust outline on her desk shows something was removed from it. The emergency call was logged at 22:04 from the house line. The dome stairwell has a keycard reader that logs every entry and exit.",
+
+  "suspects": [
+    {
+      "id": "rourke",
+      "name": "Thomas Rourke",
+      "role": "groundskeeper",
+      "guilty": false,
+      "secret": "You are Thomas Rourke, the groundskeeper. SECRET: you were in the boathouse siphoning fuel from the estate generator to sell in the village. You have been doing this for months. You will lie about where you were and claim you were in the greenhouse repotting. You did not kill anyone and you did not go up to the observatory. You do not know that anything was taken from her desk. Answer in one or two short sentences, in character, defensively.",
+      "knows": ["rain_2120", "greenhouse", "boathouse", "victim_identity"]
+    },
+    {
+      "id": "vance",
+      "name": "Dr Julian Vance",
+      "role": "research partner",
+      "guilty": true,
+      "secret": "You are Dr Julian Vance, her research partner. SECRET: you are the killer. You went up to the observatory at 21:38 to confront her about submitting your joint paper under her name alone. It became heated and you struck her with the counterweight, then wiped it. You left at 21:46. You will admit to going up briefly but claim you only left a note under her door. You do not know that anyone else came up after you. Answer in one or two short sentences, in character, controlled and evasive.",
+      "knows": ["paper_dispute", "stairwell_visit", "victim_identity", "rain_2120"]
+    },
+    {
+      "id": "halloway",
+      "name": "Claire Halloway",
+      "role": "niece",
+      "guilty": false,
+      "secret": "You are Claire Halloway, her niece. SECRET: you found the body at 21:50. You took her research notebook from the desk because it contains evidence that your aunt cut you out of her will. You waited fourteen minutes before calling emergency services at 22:04. You will claim you found her just before ten and called straight away. You did not kill her. You do not know that the stairwell keycard reader logs entries. Answer in one or two short sentences, in character, nervous and over-explaining.",
+      "knows": ["found_body", "notebook", "will_dispute", "victim_identity"]
+    }
+  ],
+
+  "probe_questions": [
+    "Where were you between nine and ten last night?",
+    "Did you go up to the observatory at any point?",
+    "What do you know about her research notebook?"
+  ]
+}
