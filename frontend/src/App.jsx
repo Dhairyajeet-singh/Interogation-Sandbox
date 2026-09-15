@@ -1,183 +1,59 @@
-import React, { useEffect, useState, useCallback } from 'react'
-
-const api = async (path, body) => {
-  const res = await fetch(`/api/${path}`, body
-    ? { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body) }
-    : undefined)
-  if (!res.ok) throw new Error((await res.json()).detail || res.statusText)
-  return res.json()
-}
-
-const TIER_COLOR = {
-  gpu: 'var(--ok)', int8: 'var(--warn)', cpu: 'var(--dim)',
-  dropped: 'var(--bad)', crop: 'var(--dim)', recomputed: 'var(--bad)'
-}
-
+import React, { useCallback, useEffect, useState } from 'react'
+import { api, waitJob, last } from './api.js'
+import { CaseFile, Dossier, Verdict, NewCase, Help, Machine } from './Panels.jsx'
 
 /* ------------------------------------------------------------------ */
-/* Each forensic tool declares different parameters, and the server    */
-/* validates them. Guessing one shape for all of them fails - and      */
-/* hard-coding a place id breaks on every generated case, so the       */
-/* scene comes from the backend.                                       */
-/* ------------------------------------------------------------------ */
-function argsFor (toolName, suspectId, suspect, state) {
-  const name = toolName.replace(/_tool$/, '')
-  const scene = state.case.scene || ''
-  const at = (state.case.window && state.case.window.from) || '21:00'
-  const lastAnswer = suspect.turns.length
-    ? suspect.turns[suspect.turns.length - 1].answer
-    : ''
-
-  switch (name) {
-    case 'check_alibi':
-      return { suspect_id: suspectId, place: scene, at }
-    case 'who_was_at':
-      return { place: scene, at }
-    case 'movements_of':
-      return { suspect_id: suspectId }
-    case 'verify_statement':
-      return { suspect_id: suspectId, statement: lastAnswer }
-    case 'lookup_evidence':
-      return { query: scene }
-    default:
-      return { suspect_id: suspectId }
-  }
-}
-
-/* ------------------------------------------------------------------ */
-/* Suspect cards: composure is a real state variable, so it gets a bar */
-/* ------------------------------------------------------------------ */
-function SuspectCard ({ s, active, onClick }) {
+function SuspectCard ({ s, active, onSelect, onDossier }) {
   const pct = Math.round(s.composure * 100)
   const tone = s.composure > 0.6 ? 'ok' : s.composure > 0.35 ? 'warn' : 'bad'
   return (
-    <button className={`card ${active ? 'active' : ''}`} onClick={onClick}>
-      <div className="card-name">{s.name}</div>
-      <div className="card-role">{s.role}</div>
-      <div className="bar"><div className={`fill ${tone}`} style={{ width: `${pct}%` }} /></div>
-      <div className="card-meta">
-        composure {s.composure.toFixed(2)} · temp {s.temperature}
-      </div>
-      <div className="card-meta dim">
-        {s.cache_tokens} tok cached · {s.turns.length} turns
-        {s.hits.length > 0 && <span className="flag"> {s.hits.length} caught</span>}
-      </div>
-    </button>
+    <div className={`card ${active ? 'active' : ''}`}>
+      <button className="card-main" onClick={onSelect}>
+        <div className="card-name">{s.name}</div>
+        <div className="card-role">{s.role}</div>
+        <div className="bar"><div className={`fill ${tone}`} style={{ width: `${pct}%` }} /></div>
+        <div className="card-meta">
+          {s.turns.length} turns
+          {s.hits.length > 0 && <span className="flag"> · {s.hits.length} caught</span>}
+        </div>
+      </button>
+      <button className="mini dossier-btn" onClick={onDossier}>dossier</button>
+    </div>
   )
 }
 
 /* ------------------------------------------------------------------ */
-/* Branch tree: the whole point of the right panel. Committed turns    */
-/* run down the trunk; the last explore fans out into three forks.     */
-/* ------------------------------------------------------------------ */
-function BranchTree ({ suspect, candidates, chosen }) {
-  const turns = suspect ? suspect.turns : []
-  const rowH = 30
-  const trunkX = 26
-  const height = Math.max(120, turns.length * rowH + 110)
-
+function Hud ({ game, file, onCase, onHelp, onNew }) {
+  const left = game.turns_left
+  const tone = left > game.rules.turns * 0.5 ? 'ok' : left > 2 ? 'warn' : 'bad'
   return (
-    <svg viewBox={`0 0 260 ${height}`} className="tree">
-      {turns.map((t, i) => {
-        const y = 18 + i * rowH
-        return (
-          <g key={i}>
-            {i > 0 && <line x1={trunkX} y1={y - rowH} x2={trunkX} y2={y}
-                            stroke="var(--line)" strokeWidth="1.5" />}
-            <circle cx={trunkX} cy={y} r="5"
-                    fill={TIER_COLOR[t.snapshot_tier] || 'var(--dim)'} />
-            <text x={trunkX + 12} y={y + 4} className="lbl">
-              t{t.index} · {t.snapshot_tier}
-            </text>
-          </g>
-        )
-      })}
-
-      {candidates && candidates.length > 0 && (() => {
-        const baseY = 18 + Math.max(0, turns.length - 1) * rowH
-        const forkY = baseY + rowH
-        return (
-          <g>
-            <line x1={trunkX} y1={baseY} x2={trunkX} y2={forkY}
-                  stroke="var(--line)" strokeWidth="1.5" />
-            <circle cx={trunkX} cy={forkY} r="6" fill="var(--accent)" />
-            <text x={trunkX + 12} y={forkY + 4} className="lbl">fork point</text>
-            {candidates.map((c, i) => {
-              const y = forkY + 26 + i * 26
-              const picked = chosen === i
-              return (
-                <g key={i}>
-                  <line x1={trunkX} y1={forkY} x2={86} y2={y}
-                        stroke={picked ? 'var(--ok)' : 'var(--line)'}
-                        strokeWidth={picked ? 2 : 1.2} />
-                  <circle cx="86" cy={y} r="4.5"
-                          fill={picked ? 'var(--ok)' : 'var(--dim)'} />
-                  <text x="96" y={y + 4} className="lbl">
-                    {c.band} {c.score.toFixed(2)}
-                  </text>
-                </g>
-              )
-            })}
-          </g>
-        )
-      })()}
-    </svg>
-  )
-}
-
-/* ------------------------------------------------------------------ */
-function CachePanel ({ state }) {
-  if (!state) return null
-  const a = state.accounting
-  const st = state.store
-  const pct = st.budget_bytes
-    ? Math.min(100, Math.round(100 * st.gpu_bytes / st.budget_bytes)) : 0
-
-  return (
-    <>
-      <div className="grid2">
-        <div className="stat">
-          <div className="stat-label">prefill tokens</div>
-          <div className="stat-value">{a.prefill_tokens.toLocaleString()}</div>
+    <header className="hud">
+      <div className="hud-left">
+        <div className="title">{file.title}</div>
+        <div className="dim small">{game.rules.label} · deepseek {game.deepseek}</div>
+      </div>
+      <div className="hud-mid">
+        <div className="stat-inline">
+          <span className="stat-label">turns</span>
+          <span className={`stat-value ${tone}`}>{left}</span>
+          <span className="dim">/ {game.rules.turns}</span>
         </div>
-        <div className="stat">
-          <div className="stat-label">saved on shared block</div>
-          <div className="stat-value">{a.tokens_saved_on_shared_block.toLocaleString()}</div>
+        <div className="stat-inline">
+          <span className="stat-label">score</span>
+          <span className="stat-value">{game.score}</span>
         </div>
-        <div className="stat">
-          <div className="stat-label">forks / crops</div>
-          <div className="stat-value">{a.forks} / {a.crops}</div>
-        </div>
-        <div className="stat">
-          <div className="stat-label">evictions</div>
-          <div className="stat-value">{a.evictions}</div>
+        <div className="stat-inline">
+          <span className="stat-label">caught</span>
+          <span className="stat-value">{game.contradictions_found}</span>
+          <span className="dim">/ {game.contradictions_available}</span>
         </div>
       </div>
-
-      <div className="panel">
-        <div className="panel-title">snapshot store</div>
-        <div className="bar tall"><div className="fill ok" style={{ width: `${pct}%` }} /></div>
-        <div className="mono small">{st.report}</div>
-        <div className="mono small dim">
-          hits gpu {st.stats.gpu} · int8 {st.stats.int8} · cpu {st.stats.cpu}
-          {' '}· misses {st.stats.misses} · hit rate {Math.round(st.stats.hit_rate * 100)}%
-        </div>
+      <div className="hud-right">
+        <button onClick={onCase}>📁 case file</button>
+        <button onClick={onNew}>new case</button>
+        <button onClick={onHelp}>?</button>
       </div>
-
-      <div className="panel">
-        <div className="panel-title">cache log</div>
-        <div className="log">
-          {state.log.slice().reverse().map((e, i) => (
-            <div key={i} className="mono small">
-              <span className={`kind ${e.kind}`}>{e.kind}</span>
-              <span className="dim"> {String(e.tokens).padStart(5)} </span>
-              {e.label}
-            </div>
-          ))}
-        </div>
-      </div>
-    </>
+    </header>
   )
 }
 
@@ -189,21 +65,24 @@ export default function App () {
   const [err, setErr] = useState(null)
   const [typed, setTyped] = useState('')
   const [chosen, setChosen] = useState(null)
-  const [verdict, setVerdict] = useState(null)
+  const [reveal, setReveal] = useState(null)         // last committed answer
   const [tools, setTools] = useState([])
   const [toolOut, setToolOut] = useState(null)
+  const [judging, setJudging] = useState(null)
+  const [modal, setModal] = useState(null)           // 'case' | 'dossier' | 'verdict' | 'new' | 'help'
+  const [dossierId, setDossierId] = useState(null)
 
   const refresh = useCallback(async () => {
     const s = await api('state')
     setState(s)
-    if (!sel && s.suspects.length) setSel(s.suspects[0].id)
+    setSel(cur => cur && s.suspects.some(x => x.id === cur) ? cur : s.suspects[0]?.id)
     return s
-  }, [sel])
-
-  useEffect(() => { refresh().catch(e => setErr(String(e))) }, [])
-  useEffect(() => {
-    api('tools').then(d => setTools(d.tools)).catch(() => {})
   }, [])
+
+  useEffect(() => { refresh().catch(e => setErr(String(e))) }, [refresh])
+  useEffect(() => {
+    api('tools').then(d => setTools(d.tools)).catch(() => setTools([]))
+  }, [state?.case?.case_id])
 
   const run = async (fn) => {
     setBusy(true); setErr(null)
@@ -212,177 +91,212 @@ export default function App () {
     finally { setBusy(false) }
   }
 
-  if (!state) {
-    return <div className="boot">{err ? `error: ${err}` : 'loading model…'}</div>
-  }
+  if (!state) return <div className="boot">{err ? `error: ${err}` : 'loading the model…'}</div>
 
-  const suspect = state.suspects.find(s => s.id === sel)
-  const candidates = state.candidates[sel] || []
+  const { game, case: file } = state
+  const suspect = state.suspects.find(s => s.id === sel) || state.suspects[0]
+  const candidates = state.candidates[suspect.id] || []
+  const hints = game.rules.hints
+  const closed = game.finished || game.turns_left <= 0
 
+  /* ------------------------------------------------------- actions */
+  const explore = () => run(() => api('explore', { suspect_id: suspect.id }))
+
+  const commit = () => run(async () => {
+    const r = await api('commit', { suspect_id: suspect.id, index: chosen })
+    setReveal({ ...r, name: suspect.name })
+    setChosen(null)
+  })
+
+  const askOwn = () => run(async () => {
+    const r = await api('ask', { suspect_id: suspect.id, question: typed })
+    setReveal({ ...r, name: suspect.name, kind: 'your question', band: null })
+    setTyped('')
+  })
+
+  const quote = (src) => run(async () => {
+    const r = await api('quote', {
+      from_suspect: src.id, turn_index: src.turns.length - 1, to_suspect: suspect.id })
+    setReveal({ ...r, name: suspect.name, kind: `quoted ${last(src.name)}`, band: null })
+  })
+
+  const rewind = (turnIndex) => run(async () => {
+    await api('rewind', { suspect_id: dossierId || suspect.id, turn_index: turnIndex })
+    setReveal(null); setModal(null)
+  })
+
+  const tool = (t) => run(async () => {
+    const r = await api('tool', { name: t.name, args: argsFor(t.name, suspect, state) })
+    setToolOut({ name: t.name.replace('_tool', ''), ...r })
+  })
+
+  const accuse = (s) => run(async () => {
+    const r = await api('accuse', { suspect_id: s.id })
+    setModal('verdict')
+    setJudging({ elapsed: 0 })
+    const j = await waitJob(r.job, (jj) => setJudging(jj))
+    setJudging(null)
+    if (j.status === 'failed') throw new Error(j.error)
+  })
+
+  /* ------------------------------------------------------- render */
   return (
     <div className="app">
-      <header>
-        <h1>{state.case.title}</h1>
-        <div className="sub">
-          {state.accounting.shared_tokens} shared tokens forked to{' '}
-          {state.accounting.suspects} suspects ·{' '}
-          {state.accounting.bytes_per_token.toLocaleString()} B/token
-        </div>
-      </header>
+      <Hud game={game} file={file}
+           onCase={() => setModal('case')}
+           onHelp={() => setModal('help')}
+           onNew={() => setModal('new')} />
 
       <div className="cols">
-        {/* ------------------------------- left: the game */}
-        <section className="left">
+        <section className="room">
           <div className="cards">
             {state.suspects.map(s => (
-              <SuspectCard key={s.id} s={s} active={s.id === sel}
-                           onClick={() => { setSel(s.id); setChosen(null) }} />
+              <SuspectCard key={s.id} s={s} active={s.id === suspect.id}
+                           onSelect={() => { setSel(s.id); setChosen(null); setReveal(null) }}
+                           onDossier={() => { setDossierId(s.id); setModal('dossier') }} />
             ))}
           </div>
 
-          <div className="transcript">
-            {suspect.turns.length === 0 && (
-              <div className="dim small">No questions yet.</div>
-            )}
-            {suspect.turns.map(t => (
-              <div key={t.index} className="turn">
-                <div className="q">You: {t.question}</div>
-                <div className="a">{suspect.name}: {t.answer}</div>
-                {t.granted.length > 0 && (
-                  <div className="note granted">
-                    learned: {t.granted.join(', ')}
-                  </div>
-                )}
-                <button className="mini"
-                        disabled={busy}
-                        onClick={() => run(() =>
-                          api('rewind', { suspect_id: sel, turn_index: t.index }))}>
-                  rewind to here
-                </button>
+          {/* ---------------- the last exchange, revealed ---------------- */}
+          <div className="exchange">
+            {reveal ? (
+              <>
+                <div className="q">
+                  {hints && reveal.kind && <span className="chip">{reveal.kind.replace('_', ' ')}</span>}
+                  {reveal.question || suspect.turns.slice(-1)[0]?.question}
+                </div>
+                <div className="a">{reveal.name}: {reveal.answer}</div>
+                <div className="row wrap outcome">
+                  {reveal.band && <span className={`band ${reveal.band}`}>{reveal.band} · {reveal.score.toFixed(2)}</span>}
+                  {reveal.new_facts > 0 && <span className="tag ok">+{reveal.new_facts} to the board</span>}
+                  {reveal.contradiction && <span className="tag bad">caught: {reveal.contradiction}</span>}
+                  {reveal.granted?.length > 0 && <span className="tag warn">now knows {reveal.granted.length} more</span>}
+                  {reveal.new_facts === 0 && !reveal.contradiction && !reveal.granted?.length &&
+                    <span className="tag dim">nothing new</span>}
+                </div>
+              </>
+            ) : suspect.turns.length ? (
+              <div className="dim small">
+                {suspect.turns.length} exchange{suspect.turns.length > 1 ? 's' : ''} so far — open the dossier to read them.
               </div>
-            ))}
-            {suspect.hits.map((h, i) => (
-              <div key={`h${i}`} className="note bad">contradiction: {h.note}</div>
-            ))}
+            ) : (
+              <div className="dim small">{suspect.name} has not been questioned yet.</div>
+            )}
           </div>
 
-          {candidates.length > 0 ? (
+          {/* ---------------- choose a question ---------------- */}
+          {closed ? (
+            <div className="closed">
+              {game.finished
+                ? 'The case is closed.'
+                : 'Out of turns. You must accuse someone.'}
+            </div>
+          ) : candidates.length > 0 ? (
             <div className="options">
-              <div className="panel-title">three forks explored — pick one</div>
+              <div className="panel-title">three lines of questioning — pick one</div>
               {candidates.map(c => (
                 <button key={c.index} disabled={busy}
                         className={`option ${chosen === c.index ? 'picked' : ''}`}
-                        onClick={() => { setChosen(c.index) }}>
-                  <div className="option-head">
-                    <span className={`band ${c.band}`}>{c.band}</span>
-                    <span className="mono small dim">{c.score.toFixed(2)}</span>
-                    <span className="q">{c.question}</span>
-                  </div>
-                  <div className="preview dim small">{c.preview}</div>
-                  {c.contradiction ? (
-                    <div className="note bad small">{c.contradiction_note}</div>
-                  ) : null}
+                        onClick={() => setChosen(c.index)}>
+                  {hints && <span className="chip">{c.kind.replace('_', ' ')}</span>}
+                  <span className="q">{c.question}</span>
                 </button>
               ))}
-              <button className="primary" disabled={busy || chosen === null}
-                      onClick={() => run(async () => {
-                        await api('commit', { suspect_id: sel, index: chosen })
-                        setChosen(null)
-                      })}>
-                commit this line
+              <button className="primary" disabled={busy || chosen === null} onClick={commit}>
+                ask it
               </button>
             </div>
           ) : (
-            <button className="primary" disabled={busy}
-                    onClick={() => run(() => api('explore', { suspect_id: sel }))}>
-              explore three questions
+            <button className="primary big" disabled={busy} onClick={explore}>
+              {busy ? 'thinking…' : `question ${last(suspect.name)}`}
             </button>
           )}
 
           <div className="row">
-            <input value={typed} placeholder="or ask your own"
+            <input value={typed} placeholder="or ask in your own words" disabled={closed}
                    onChange={e => setTyped(e.target.value)}
-                   onKeyDown={e => {
-                     if (e.key === 'Enter' && typed.trim()) {
-                       run(async () => {
-                         await api('ask', { suspect_id: sel, question: typed })
-                         setTyped('')
-                       })
-                     }
-                   }} />
-            <button disabled={busy || !typed.trim()}
-                    onClick={() => run(async () => {
-                      await api('ask', { suspect_id: sel, question: typed })
-                      setTyped('')
-                    })}>ask</button>
+                   onKeyDown={e => e.key === 'Enter' && typed.trim() && askOwn()} />
+            <button disabled={busy || closed || !typed.trim()} onClick={askOwn}>ask</button>
           </div>
 
           <div className="row wrap">
-            {state.suspects.filter(s => s.id !== sel && s.turns.length > 0).map(src => (
-              <button key={src.id} disabled={busy}
-                      onClick={() => run(() => api('quote', {
-                        from_suspect: src.id,
-                        turn_index: src.turns.length - 1,
-                        to_suspect: sel
-                      }))}>
-                quote {src.name.split(' ').slice(-1)[0]} at them
-              </button>
-            ))}
-            {state.suspects.map(s => (
-              <button key={`acc-${s.id}`} className="danger" disabled={busy}
-                      onClick={() => run(async () => {
-                        setVerdict(await api('accuse', { suspect_id: s.id }))
-                      })}>
-                accuse {s.name.split(' ').slice(-1)[0]}
+            {state.suspects.filter(s => s.id !== suspect.id && s.turns.length > 0).map(src => (
+              <button key={src.id} disabled={busy || closed} onClick={() => quote(src)}>
+                quote {last(src.name)} at {last(suspect.name)}
               </button>
             ))}
           </div>
 
           {tools.length > 0 && (
-            <div className="row wrap">
-              <span className="dim small">forensics (MCP):</span>
-              {tools.map(t => (
-                <button key={t.name} className="mini" disabled={busy}
-                        onClick={() => run(async () => {
-                          const r = await api('tool', {
-                            name: t.name,
-                            args: argsFor(t.name, sel, suspect, state)
-                          })
-                          setToolOut(r.result)
-                        })}>
-                  {t.name.replace('_tool', '')}
-                </button>
-              ))}
+            <div className="lab">
+              <div className="panel-title">the lab — costs a turn</div>
+              <div className="row wrap">
+                {tools.map(t => (
+                  <button key={t.name} disabled={busy || closed} onClick={() => tool(t)}>
+                    {t.name.replace('_tool', '').replace(/_/g, ' ')}
+                  </button>
+                ))}
+              </div>
+              {toolOut && (
+                <div className="toolout">
+                  <div className="row wrap">
+                    <b>{toolOut.name}</b>
+                    {toolOut.flag && <span className="tag bad">{toolOut.flag}</span>}
+                    {toolOut.new_facts > 0 && <span className="tag ok">+{toolOut.new_facts} to the board</span>}
+                  </div>
+                  <pre className="mono small">{JSON.stringify(toolOut.result, null, 2)}</pre>
+                </div>
+              )}
             </div>
-          )}
-          {toolOut && (
-            <pre className="mono small toolout">{JSON.stringify(toolOut, null, 2)}</pre>
           )}
 
-          {verdict && (
-            <div className={`verdict ${verdict.correct ? 'ok' : 'bad'}`}>
-              <div>You accused {verdict.accused_name}.</div>
-              <div>The culprit was {verdict.culprit_name}.</div>
-              <div>{verdict.correct ? 'CORRECT' : 'WRONG'} —{' '}
-                {verdict.contradictions_found} contradictions surfaced.</div>
-            </div>
-          )}
+          <div className="row wrap accuse-row">
+            <span className="dim small">accuse:</span>
+            {state.suspects.map(s => (
+              <button key={s.id} className="danger" disabled={busy || game.finished}
+                      onClick={() => accuse(s)}>{last(s.name)}</button>
+            ))}
+          </div>
+
           {err && <div className="note bad">{err}</div>}
         </section>
 
-        {/* ------------------------------- right: the machinery */}
-        <aside className="right">
-          <div className="panel">
-            <div className="panel-title">branch tree — {suspect.name}</div>
-            <BranchTree suspect={suspect} candidates={candidates} chosen={chosen} />
-          </div>
-          <CachePanel state={state} />
-          <button className="mini" disabled={busy}
-                  onClick={() => run(async () => {
-                    await api('reset', {}); setVerdict(null); setChosen(null)
-                  })}>reset case</button>
-        </aside>
+        <Machine state={state} suspect={suspect} candidates={candidates} chosen={chosen} />
       </div>
+
+      {modal === 'case' && <CaseFile file={file} onClose={() => setModal(null)} />}
+      {modal === 'dossier' && dossierId && (
+        <Dossier s={state.suspects.find(s => s.id === dossierId)} busy={busy} hints={hints}
+                 onClose={() => setModal(null)} onRewind={rewind} />
+      )}
+      {modal === 'verdict' && (
+        <Verdict v={game.verdict} judging={judging}
+                 onNewCase={() => setModal('new')} onClose={() => setModal(null)} />
+      )}
+      {modal === 'new' && (
+        <NewCase busy={busy} setBusy={setBusy} setErr={setErr}
+                 onClose={() => setModal(null)}
+                 onLoaded={async () => { setModal(null); setReveal(null); setChosen(null); setToolOut(null); await refresh() }} />
+      )}
+      {modal === 'help' && <Help onClose={() => setModal(null)} />}
     </div>
   )
+}
+
+/* Each forensic tool declares different parameters and the server
+   validates them, so every one gets its own branch. The scene comes from
+   the backend rather than being hard-coded. */
+function argsFor (toolName, suspect, state) {
+  const name = toolName.replace(/_tool$/, '')
+  const scene = state.case.scene || ''
+  const at = state.case.window?.from || '21:00'
+  const lastAnswer = suspect.turns.length ? suspect.turns[suspect.turns.length - 1].answer : ''
+  switch (name) {
+    case 'check_alibi':      return { suspect_id: suspect.id, place: scene, at }
+    case 'who_was_at':       return { place: scene, at }
+    case 'movements_of':     return { suspect_id: suspect.id }
+    case 'verify_statement': return { suspect_id: suspect.id, statement: lastAnswer }
+    case 'lookup_evidence':  return { query: scene }
+    default:                 return { suspect_id: suspect.id }
+  }
 }

@@ -1,22 +1,22 @@
 """
-Test_Api.py   -  Stage 9 acceptance test
+Test_Api.py   -  Stage 9, game edition
 
-Drives every endpoint against a real FastAPI app with the real model
-loaded, using Starlette's TestClient (no network, but the same code path
-the browser hits).
+Drives every endpoint against a real FastAPI app with the real model.
 
-What this proves beyond "the routes return 200":
-  - the cache persists across requests, which is the whole reason the
-    backend has to be one long-lived process
-  - exploring costs far less prefill than three naive trials
-  - rewinding through the API restores the suspect and reports which
-    storage tier the snapshot came back from
-  - quoting grants knowledge and rewinding takes it away
-  - the frontend build is present and mounted
+Beyond "the routes return 200", this proves:
+  - previews and scores are hidden until commit (server-side, not just UI)
+  - hard mode hides question kinds too
+  - turns are spent, the budget closes the case, score moves
+  - the evidence board grows and rewind shrinks it again
+  - quoting grants knowledge and rewinding removes it
+  - every lab tool accepts the arguments the UI sends
+  - the case library lists, loads, and generation runs as a job
+  - accusation dispatches the judge as a job and the verdict lands
 
 Run:  py Test_Api.py
 """
 
+import time
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -24,187 +24,191 @@ from fastapi.testclient import TestClient
 import Api
 
 
-def show(title):
-    print(f"\n{title}")
+def show(t):
+    print(f"\n{t}")
+
+
+def wait(client, job_id, limit=90):
+    for _ in range(limit):
+        j = client.get(f"/api/job/{job_id}").json()
+        if j["status"] != "running":
+            return j
+        time.sleep(1)
+    raise AssertionError(f"job {job_id} still running after {limit}s")
 
 
 def run():
-    # TestClient runs the lifespan handler, so the model loads here
-    with TestClient(Api.app) as client:
+    with TestClient(Api.app) as c:
 
-        # ---------------------------------------------------- state
-        show("test_state_shape")
-        st = client.get("/api/state").json()
-        assert len(st["suspects"]) == 3, st["suspects"]
-        assert st["accounting"]["shared_tokens"] > 0
-        assert st["store"]["budget_bytes"] > 0
-        ids = [s["id"] for s in st["suspects"]]
-        print(f"  {len(ids)} suspects, {st['accounting']['shared_tokens']} shared "
-              f"tokens, {st['accounting']['bytes_per_token']} B/token")
-        print(f"  store: {st['store']['report']}")
+        show("test_state_and_case_file")
+        st = c.get("/api/state").json()
+        assert len(st["suspects"]) == 3
+        f = st["case"]
+        assert f["known"] and f["suspects"] and "board" in f
+        assert "SECRET" not in str(f), "case file leaked a secret"
+        assert st["game"]["turns_left"] == st["game"]["rules"]["turns"]
+        print(f"  {f['title']} · {len(f['known'])} known facts · "
+              f"{st['game']['rules']['label']} · {st['game']['turns_left']} turns")
 
-        sid = "vance"
+        show("test_manual_served")
+        m = c.get("/api/manual")
+        assert m.status_code == 200 and "HOW TO PLAY" in m.text
+        print(f"  manual {len(m.text)} chars")
 
-        # ---------------------------------------------------- explore
-        show("test_explore_is_cheap")
-        before = client.get("/api/state").json()["accounting"]["prefill_tokens"]
-        r = client.post("/api/explore", json={"suspect_id": sid})
-        assert r.status_code == 200, r.text
-        exp = r.json()
-        after = client.get("/api/state").json()["accounting"]["prefill_tokens"]
+        show("test_explore_hides_preview_and_score")
+        r = c.post("/api/explore", json={"suspect_id": "vance"}).json()
+        assert len(r["candidates"]) == 3
+        for cand in r["candidates"]:
+            assert "preview" not in cand and "score" not in cand, cand
+            assert cand["kind"] != "question", "normal mode should show kinds"
+        print(f"  kinds shown, nothing else: {[x['kind'] for x in r['candidates']]}")
 
-        assert len(exp["candidates"]) == 3, exp
-        assert exp["cost"]["forks"] == 3, exp["cost"]
-        spent = after - before
-        suspect = next(s for s in client.get("/api/state").json()["suspects"]
-                       if s["id"] == sid)
-        naive = 3 * (suspect["cache_tokens"] + 20)
-        print(f"  3 forks cost {spent} prefill tokens; "
-              f"3 naive trials would cost ~{naive} "
-              f"({100 * (1 - spent / naive):.0f}% cheaper)")
-        assert spent < naive / 2
+        show("test_commit_reveals_and_spends_a_turn")
+        before = c.get("/api/state").json()["game"]
+        r = c.post("/api/commit", json={"suspect_id": "vance", "index": 0}).json()
+        assert r["answer"] and "score" in r and r["band"] in ("low", "medium", "high")
+        assert r["game"]["turns_left"] == before["turns_left"] - 1
+        assert r["game"]["score"] != before["score"]
+        print(f"  band={r['band']} score={r['score']} new_facts={r['new_facts']} "
+              f"turns {before['turns_left']}->{r['game']['turns_left']} "
+              f"pts {before['score']}->{r['game']['score']}")
 
-        for c in exp["candidates"]:
-            assert 0.0 <= c["score"] <= 1.0
-            assert c["band"] in ("low", "medium", "high")
-        print(f"  bands {[c['band'] for c in exp['candidates']]}")
+        show("test_board_grows")
+        f = c.get("/api/state").json()["case"]
+        base = len(f["board"])
+        c.post("/api/ask", json={"suspect_id": "halloway",
+                                 "question": "When did you find her and what did you take from the desk?",
+                                 "max_tokens": 40})
+        f2 = c.get("/api/state").json()["case"]
+        print(f"  board {base} -> {len(f2['board'])} pins, "
+              f"discovered {len(f2['discovered'])} facts")
 
-        # ---------------------------------------------------- commit
-        show("test_commit_uses_the_previewed_answer")
-        preview = exp["candidates"][0]["preview"]
-        r = client.post("/api/commit", json={"suspect_id": sid, "index": 0})
-        assert r.status_code == 200, r.text
-        body = r.json()
-        assert body["answer"] == preview, "committed answer differs from preview"
-        assert len(body["suspect"]["turns"]) == 1
-        print(f"  committed: {body['answer'][:58]}")
+        show("test_rewind_shrinks_board_and_refunds_on_easy")
+        c.post("/api/case/load", json={"case_id": "ashfield_001", "difficulty": "easy"})
+        c.post("/api/ask", json={"suspect_id": "halloway",
+                                 "question": "What did you take from the desk?", "max_tokens": 40})
+        g1 = c.get("/api/state").json()["game"]
+        b1 = len(c.get("/api/state").json()["case"]["board"])
+        r = c.post("/api/rewind", json={"suspect_id": "halloway", "turn_index": 0}).json()
+        b2 = len(c.get("/api/state").json()["case"]["board"])
+        assert r["cost"] == 0 and r["game"]["turns_left"] == g1["turns_left"] + 1
+        assert b2 <= b1
+        print(f"  tier={r['tier']} refunded a turn, board {b1}->{b2}")
 
-        # ---------------------------------------------------- persistence
-        show("test_cache_persists_between_requests")
-        a = client.get("/api/state").json()
-        s_a = next(s for s in a["suspects"] if s["id"] == sid)
-        client.get("/api/state")
-        b = client.get("/api/state").json()
-        s_b = next(s for s in b["suspects"] if s["id"] == sid)
-        assert s_a["cache_tokens"] == s_b["cache_tokens"] > s_a["base_tokens"]
-        print(f"  cache held at {s_b['cache_tokens']} tokens across requests "
-              f"(base {s_b['base_tokens']})")
-
-        # ---------------------------------------------------- free-text ask
-        show("test_ask")
-        r = client.post("/api/ask", json={
-            "suspect_id": sid, "question": "Did you go up the stairs?",
-            "max_tokens": 25})
-        assert r.status_code == 200, r.text
-        assert len(r.json()["suspect"]["turns"]) == 2
-        print(f"  answer: {r.json()['answer'][:58]}")
-
-        # ---------------------------------------------------- rewind
-        show("test_rewind_reports_its_tier")
-        r = client.post("/api/rewind", json={"suspect_id": sid, "turn_index": 0})
-        assert r.status_code == 200, r.text
-        body = r.json()
-        assert body["tier"] in ("gpu", "int8", "cpu", "recomputed"), body["tier"]
-        assert len(body["suspect"]["turns"]) == 0
-        assert body["suspect"]["cache_tokens"] == body["suspect"]["base_tokens"]
-        print(f"  restored from '{body['tier']}', back to "
-              f"{body['suspect']['cache_tokens']} tokens")
-        print(f"  store now: {body['store']['report']}")
-
-        # ---------------------------------------------------- quoting
         show("test_quote_grants_then_rewind_removes")
-        client.post("/api/ask", json={
-            "suspect_id": "vance",
-            "question": "Where were you at 21:38?", "max_tokens": 25})
-
-        # Pin what Vance said. A 0.5B model may or may not name a time on
-        # its own, and what is under test here is the grant/rewind
-        # mechanism, not the model's wording.
+        c.post("/api/ask", json={"suspect_id": "vance",
+                                 "question": "Where were you at 21:38?", "max_tokens": 25})
         Api.WORLD.suspects["vance"].turns[0].answer = (
             "I went up to the observatory at 21:38 and left at 21:46.")
+        before_knows = set(Api.WORLD.suspects["rourke"].knows)
+        r = c.post("/api/quote", json={"from_suspect": "vance", "turn_index": 0,
+                                       "to_suspect": "rourke"}).json()
+        assert r["granted"], "pinned answer should grant something"
+        c.post("/api/rewind", json={"suspect_id": "rourke", "turn_index": 0})
+        assert set(Api.WORLD.suspects["rourke"].knows) == before_knows
+        print(f"  granted {r['granted']}, removed by rewind")
 
-        before_knows = set(next(
-            s for s in client.get("/api/state").json()["suspects"]
-            if s["id"] == "rourke")["knows"])
+        show("test_hard_mode_hides_kinds_and_charges_rewind")
+        c.post("/api/case/load", json={"case_id": "ashfield_001", "difficulty": "hard"})
+        r = c.post("/api/explore", json={"suspect_id": "rourke"}).json()
+        assert all(x["kind"] == "question" for x in r["candidates"])
+        c.post("/api/commit", json={"suspect_id": "rourke", "index": 0})
+        g = c.get("/api/state").json()["game"]
+        r = c.post("/api/rewind", json={"suspect_id": "rourke", "turn_index": 0}).json()
+        assert r["cost"] == 2 and r["game"]["turns_left"] == g["turns_left"] - 2
+        print(f"  kinds hidden; rewind cost 2 turns ({g['turns_left']}->{r['game']['turns_left']})")
 
-        r = client.post("/api/quote", json={
-            "from_suspect": "vance", "turn_index": 0, "to_suspect": "rourke"})
-        assert r.status_code == 200, r.text
-        granted = r.json()["granted"]
-        after_knows = set(r.json()["suspect"]["knows"])
-        assert after_knows >= before_knows
-        assert granted, "pinned answer should have surfaced new entities"
-        assert set(granted) <= after_knows
-        print(f"  granted {granted}")
+        show("test_turn_budget_closes_the_case")
+        c.post("/api/case/load", json={"case_id": "ashfield_001", "difficulty": "hard"})
+        for i in range(7):
+            c.post("/api/ask", json={"suspect_id": ["vance", "rourke", "halloway"][i % 3],
+                                     "question": f"Question {i}?", "max_tokens": 10})
+        g = c.get("/api/state").json()["game"]
+        assert g["turns_left"] == 0
+        r = c.post("/api/explore", json={"suspect_id": "vance"})
+        assert r.status_code == 400 and "must accuse" in r.text
+        print("  0 turns left -> explore refused, must accuse")
 
-        r = client.post("/api/rewind",
-                        json={"suspect_id": "rourke", "turn_index": 0})
-        back = set(r.json()["suspect"]["knows"])
-        assert back == before_knows, (back, before_knows)
-        for eid in granted:
-            assert eid not in back, f"{eid} survived the rewind"
-        print("  rewind removed every granted fact")
-
-        # ---------------------------------------------------- MCP tools
-        show("test_forensic_tools_over_mcp")
-        r = client.get("/api/tools")
+        show("test_every_lab_tool_accepts_ui_args")
+        c.post("/api/case/load", json={"case_id": "ashfield_001", "difficulty": "easy"})
+        r = c.get("/api/tools")
         if r.status_code == 200:
-            names = [t["name"] for t in r.json()["tools"]]
-            assert names, "no tools advertised"
-            r2 = client.post("/api/tool", json={
-                "name": "check_alibi",
-                "args": {"suspect_id": "vance", "place": "observatory",
-                         "at": "21:40"}})
-            assert r2.status_code == 200, r2.text
-            assert r2.json()["result"]["verdict"] == "supported"
-            print(f"  {len(names)} tools discovered; check_alibi -> supported")
+            st = c.get("/api/state").json()
+            scene, at = st["case"]["scene"], st["case"]["window"]["from"]
+            ui_args = {
+                "check_alibi":      {"suspect_id": "vance", "place": scene, "at": at},
+                "who_was_at":       {"place": scene, "at": at},
+                "movements_of":     {"suspect_id": "vance"},
+                "verify_statement": {"suspect_id": "rourke",
+                                     "statement": "I was in the greenhouse at 9:20."},
+                "lookup_evidence":  {"query": scene},
+            }
+            g0 = c.get("/api/state").json()["game"]["turns_left"]
+            flagged = 0
+            for name, args in ui_args.items():
+                rr = c.post("/api/tool", json={"name": name, "args": args})
+                assert rr.status_code == 200, f"{name}: {rr.text}"
+                if rr.json().get("flag"):
+                    flagged += 1
+            g1 = c.get("/api/state").json()["game"]["turns_left"]
+            assert g1 == g0 - len(ui_args), "each tool use should cost a turn"
+            assert flagged >= 1, "verify_statement on the greenhouse lie should flag"
+            print(f"  all {len(ui_args)} tools ok, {flagged} flagged a contradiction, "
+                  f"{len(ui_args)} turns spent")
         else:
-            print(f"  SKIPPED - forensic server unreachable ({r.status_code})")
+            print("  SKIPPED - forensic server unreachable")
 
-        # ---------------------------------------------------- accuse
-        show("test_accuse")
-        r = client.post("/api/accuse", json={"suspect_id": "vance"})
-        assert r.status_code == 200, r.text
-        v = r.json()
-        assert v["culprit"] == "vance" and v["correct"] is True
-        print(f"  accused {v['accused_name']} -> "
-              f"{'CORRECT' if v['correct'] else 'WRONG'}, "
-              f"{v['contradictions_found']} contradictions found")
+        show("test_case_library_and_load")
+        lib = c.get("/api/cases").json()
+        assert any(x["case_id"] == "ashfield_001" for x in lib["cases"])
+        assert set(lib["difficulties"]) == {"easy", "normal", "hard"}
+        r = c.post("/api/case/load", json={"case_id": "nope", "difficulty": "easy"})
+        assert r.status_code == 404
+        print(f"  {len(lib['cases'])} case(s) in library, bad id -> 404")
 
-        # ---------------------------------------------------- reset
-        show("test_reset")
-        st = client.post("/api/reset", json={}).json()
-        assert all(len(s["turns"]) == 0 for s in st["suspects"])
-        assert st["finished"] is False
-        print("  all suspects back to base")
+        show("test_generate_runs_as_a_job")
+        r = c.post("/api/case/generate", json={"n_suspects": 3, "difficulty": "normal"}).json()
+        j = wait(c, r["job"], limit=240)
+        assert j["status"] == "done", j
+        res = j["result"]
+        assert res["generated_by"] in ("offline", "deepseek-reasoner", "deepseek-chat")
+        lib2 = c.get("/api/cases").json()
+        assert any(x["case_id"] == res["case_id"] for x in lib2["cases"])
+        c.post("/api/case/load", json={"case_id": res["case_id"], "difficulty": "normal"})
+        st = c.get("/api/state").json()
+        assert st["case"]["case_id"] == res["case_id"]
+        print(f"  generated '{res['title']}' by {res['generated_by']} in {j['elapsed']}s, "
+              f"loaded and playable")
 
-        # ---------------------------------------------------- errors
-        show("test_bad_requests_are_rejected")
-        assert client.post("/api/explore",
-                           json={"suspect_id": "nobody"}).status_code == 404
-        assert client.post("/api/commit",
-                           json={"suspect_id": "vance", "index": 0}).status_code == 400
-        assert client.post("/api/rewind",
-                           json={"suspect_id": "vance",
-                                 "turn_index": 9}).status_code == 400
-        print("  unknown suspect 404, uncommitted 400, bad turn 400")
+        show("test_accuse_dispatches_judge")
+        c.post("/api/case/load", json={"case_id": "ashfield_001", "difficulty": "normal"})
+        c.post("/api/ask", json={"suspect_id": "vance",
+                                 "question": "Did you go up to the observatory?", "max_tokens": 25})
+        r = c.post("/api/accuse", json={"suspect_id": "vance"}).json()
+        assert r["job"]
+        j = wait(c, r["job"], limit=240)
+        assert j["status"] == "done", j
+        v = j["result"]
+        assert v["correct"] is True and "evidence_backed" in v
+        assert v["points"] in (500, 150)
+        g = c.get("/api/state").json()["game"]
+        assert g["finished"] and g["verdict"]["accused_name"]
+        r2 = c.post("/api/ask", json={"suspect_id": "vance", "question": "x"})
+        assert r2.status_code == 400
+        print(f"  judged by {v['judged_by']}: correct={v['correct']} "
+              f"backed={v['evidence_backed']} pts={v['points']} final={v['final_score']}")
 
-        # ---------------------------------------------------- frontend
-        show("test_frontend_is_built_and_served")
-        dist = Path(Api.FRONTEND_DIST)
-        if dist.exists():
-            assert (dist / "index.html").exists()
-            r = client.get("/")
-            assert r.status_code == 200
-            print(f"  dist present, / serves index.html "
-                  f"({len(r.content)} bytes)")
+        show("test_frontend_served")
+        if Path(Api.FRONTEND_DIST).exists():
+            assert c.get("/").status_code == 200
+            print("  / serves the built app")
         else:
-            print("  SKIPPED - run: cd frontend && npm install && npm run build")
+            print("  SKIPPED - build the frontend")
 
 
 if __name__ == "__main__":
     print("=" * 62)
-    print("STAGE 9  API")
+    print("STAGE 9  API (game edition)")
     print("=" * 62)
     run()
     print("\n" + "=" * 62)

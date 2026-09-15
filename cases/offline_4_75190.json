@@ -1,0 +1,370 @@
+{
+  "case_id": "offline_4_75190",
+  "title": "The Carew Case (4 suspects)",
+  "culprit": "keller",
+  "crime_scene": "loc_library",
+  "crime_window": {
+    "from": "20:00",
+    "to": "21:00"
+  },
+  "generated_by": "offline",
+  "public_brief": "Case file. Lord Edmund Carew was found dead in the library between 20:00 and 21:00 on the evening of 3 March. He was struck once from behind. You are being questioned by a detective. Answer only from what you personally know. Never invent facts. Keep every answer to one or two short sentences, in character.",
+  "entities": {
+    "per_victim": {
+      "type": "person",
+      "text": "Lord Edmund Carew, the victim.",
+      "aliases": [
+        "Edmund Carew",
+        "Lord Carew",
+        "the victim",
+        "his lordship"
+      ]
+    },
+    "ev_letter": {
+      "type": "evidence",
+      "text": "A torn letter was found under the body.",
+      "aliases": [
+        "the letter",
+        "torn letter",
+        "the note",
+        "correspondence"
+      ]
+    },
+    "ev_ledger": {
+      "type": "evidence",
+      "text": "The estate ledger shows payments that were never declared.",
+      "aliases": [
+        "the ledger",
+        "account book",
+        "the estate accounts",
+        "the books"
+      ]
+    },
+    "ev_keyring": {
+      "type": "evidence",
+      "text": "A keyring is missing from the steward's office.",
+      "aliases": [
+        "the keyring",
+        "missing keys",
+        "set of keys",
+        "the keys"
+      ]
+    },
+    "loc_library": {
+      "type": "place",
+      "text": "The library, where he was found.",
+      "aliases": [
+        "library",
+        "the reading room",
+        "among the books"
+      ]
+    },
+    "loc_cellar": {
+      "type": "place",
+      "text": "The cellar.",
+      "aliases": [
+        "cellar",
+        "the basement",
+        "below stairs"
+      ]
+    },
+    "loc_terrace": {
+      "type": "place",
+      "text": "The terrace.",
+      "aliases": [
+        "terrace",
+        "the veranda",
+        "outside at the back"
+      ]
+    },
+    "loc_kitchen": {
+      "type": "place",
+      "text": "The kitchen.",
+      "aliases": [
+        "kitchen",
+        "the scullery",
+        "by the stove"
+      ]
+    },
+    "loc_gallery": {
+      "type": "place",
+      "text": "The gallery.",
+      "aliases": [
+        "gallery",
+        "the long room",
+        "where the paintings hang"
+      ]
+    },
+    "time_2000": {
+      "type": "time",
+      "text": "20:00, during the evening.",
+      "aliases": [
+        "20:00",
+        "8pm",
+        "eight",
+        "eight o'clock"
+      ]
+    },
+    "time_2015": {
+      "type": "time",
+      "text": "20:15, during the evening.",
+      "aliases": [
+        "20:15",
+        "8:15",
+        "quarter past eight"
+      ]
+    },
+    "time_2030": {
+      "type": "time",
+      "text": "20:30, during the evening.",
+      "aliases": [
+        "20:30",
+        "8:30",
+        "half past eight"
+      ]
+    },
+    "time_2045": {
+      "type": "time",
+      "text": "20:45, during the evening.",
+      "aliases": [
+        "20:45",
+        "8:45",
+        "quarter to nine"
+      ]
+    },
+    "time_2100b": {
+      "type": "time",
+      "text": "21:00, during the evening.",
+      "aliases": [
+        "21:00",
+        "9pm",
+        "nine",
+        "nine o'clock"
+      ]
+    },
+    "per_ambrose": {
+      "type": "person",
+      "text": "Nathaniel Ambrose, the estate steward.",
+      "aliases": [
+        "Nathaniel Ambrose",
+        "Ambrose",
+        "the estate steward"
+      ]
+    },
+    "ev_secret_ambrose": {
+      "type": "evidence",
+      "text": "Nathaniel Ambrose had a private arrangement with the victim.",
+      "aliases": [
+        "ambrose arrangement",
+        "the estate steward arrangement",
+        "Nathaniel Ambrose's dealings"
+      ]
+    },
+    "per_keller": {
+      "type": "person",
+      "text": "Dr Ruth Keller, the physician.",
+      "aliases": [
+        "Dr Ruth Keller",
+        "Keller",
+        "the physician"
+      ]
+    },
+    "ev_secret_keller": {
+      "type": "evidence",
+      "text": "Dr Ruth Keller had a private arrangement with the victim.",
+      "aliases": [
+        "keller arrangement",
+        "the physician arrangement",
+        "Dr Ruth Keller's dealings"
+      ]
+    },
+    "per_voss": {
+      "type": "person",
+      "text": "Peter Voss, the chauffeur.",
+      "aliases": [
+        "Peter Voss",
+        "Voss",
+        "the chauffeur"
+      ]
+    },
+    "ev_secret_voss": {
+      "type": "evidence",
+      "text": "Peter Voss had a private arrangement with the victim.",
+      "aliases": [
+        "voss arrangement",
+        "the chauffeur arrangement",
+        "Peter Voss's dealings"
+      ]
+    },
+    "per_iyer": {
+      "type": "person",
+      "text": "Meera Iyer, the archivist.",
+      "aliases": [
+        "Meera Iyer",
+        "Iyer",
+        "the archivist"
+      ]
+    },
+    "ev_secret_iyer": {
+      "type": "evidence",
+      "text": "Meera Iyer had a private arrangement with the victim.",
+      "aliases": [
+        "iyer arrangement",
+        "the archivist arrangement",
+        "Meera Iyer's dealings"
+      ]
+    }
+  },
+  "public_facts": [
+    "per_victim",
+    "loc_library",
+    "ev_letter",
+    "time_2000",
+    "time_2100b"
+  ],
+  "timeline": [
+    {
+      "actor": "per_victim",
+      "place": "loc_library",
+      "from": "20:00",
+      "to": "21:00",
+      "verifiable_by": null
+    },
+    {
+      "actor": "per_ambrose",
+      "place": "loc_cellar",
+      "from": "20:00",
+      "to": "21:00",
+      "verifiable_by": null
+    },
+    {
+      "actor": "per_keller",
+      "place": "loc_library",
+      "from": "20:15",
+      "to": "20:45",
+      "verifiable_by": null
+    },
+    {
+      "actor": "per_keller",
+      "place": "loc_terrace",
+      "from": "20:45",
+      "to": "21:00",
+      "verifiable_by": null
+    },
+    {
+      "actor": "per_voss",
+      "place": "loc_kitchen",
+      "from": "20:00",
+      "to": "21:00",
+      "verifiable_by": null
+    },
+    {
+      "actor": "per_iyer",
+      "place": "loc_gallery",
+      "from": "20:00",
+      "to": "21:00",
+      "verifiable_by": null
+    }
+  ],
+  "suspects": [
+    {
+      "id": "ambrose",
+      "name": "Nathaniel Ambrose",
+      "role": "estate steward",
+      "guilty": false,
+      "persona": "You are Nathaniel Ambrose, the estate steward. You are guarded and answer briefly.",
+      "secret": "SECRET: you were in the cellar and will say so. ",
+      "knows": [
+        "ev_secret_ambrose",
+        "loc_cellar",
+        "per_ambrose"
+      ],
+      "lies": [
+        {
+          "claim": "was in the cellar all evening",
+          "truth": "left briefly and told no one",
+          "exposed_by": [
+            "ev_ledger",
+            "ev_keyring"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "keller",
+      "name": "Dr Ruth Keller",
+      "role": "physician",
+      "guilty": true,
+      "persona": "You are Dr Ruth Keller, the physician. You are guarded and answer briefly.",
+      "secret": "SECRET: you were in the library with him and struck him. You will claim you were in the terrace the whole time. ",
+      "knows": [
+        "ev_secret_keller",
+        "loc_library",
+        "per_keller"
+      ],
+      "lies": [
+        {
+          "claim": "was in the terrace all evening",
+          "truth": "was in the library between 20:15 and 20:45",
+          "exposed_by": [
+            "ev_ledger",
+            "ev_keyring"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "voss",
+      "name": "Peter Voss",
+      "role": "chauffeur",
+      "guilty": false,
+      "persona": "You are Peter Voss, the chauffeur. You are guarded and answer briefly.",
+      "secret": "SECRET: you were in the kitchen and will say so. ",
+      "knows": [
+        "ev_secret_voss",
+        "loc_kitchen",
+        "per_voss"
+      ],
+      "lies": [
+        {
+          "claim": "was in the kitchen all evening",
+          "truth": "left briefly and told no one",
+          "exposed_by": [
+            "ev_ledger",
+            "ev_keyring"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "iyer",
+      "name": "Meera Iyer",
+      "role": "archivist",
+      "guilty": false,
+      "persona": "You are Meera Iyer, the archivist. You are guarded and answer briefly.",
+      "secret": "SECRET: you were in the gallery and will say so. ",
+      "knows": [
+        "ev_secret_iyer",
+        "loc_gallery",
+        "per_iyer"
+      ],
+      "lies": [
+        {
+          "claim": "was in the gallery all evening",
+          "truth": "left briefly and told no one",
+          "exposed_by": [
+            "ev_ledger",
+            "ev_keyring"
+          ]
+        }
+      ]
+    }
+  ],
+  "probe_questions": [
+    "Where were you between eight and nine?",
+    "When did you last see him alive?",
+    "Did you go into the library at any point?",
+    "What do you know about the ledger?",
+    "Who do you think did this?"
+  ]
+}

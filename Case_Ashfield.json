@@ -2,140 +2,280 @@
   "case_id": "ashfield_001",
   "title": "Death at Ashfield House",
   "culprit": "vance",
-
   "public_brief": "Case file. Dr Elena Marsh, astronomer, was found dead in the observatory at Ashfield House on the night of 14 October. She was killed by a single blow to the head. Time of death was between 21:00 and 22:00. You are being questioned by a detective. Answer only from what you personally know. Never invent facts. Keep every answer to one or two short sentences, in character.",
-
   "entities": {
     "ev_counterweight": {
       "type": "evidence",
       "text": "The murder weapon was a brass counterweight taken from the telescope mount. It had been wiped clean.",
-      "aliases": ["counterweight", "brass counterweight", "the weight", "brass weight", "telescope weight"]
+      "aliases": [
+        "counterweight",
+        "brass counterweight",
+        "the weight",
+        "brass weight",
+        "telescope weight"
+      ]
     },
     "ev_umbrella": {
       "type": "evidence",
       "text": "A wet umbrella was found in the east hall.",
-      "aliases": ["umbrella", "wet umbrella"]
+      "aliases": [
+        "umbrella",
+        "wet umbrella",
+        "the brolly",
+        "a dripping umbrella"
+      ]
     },
     "ev_dust_outline": {
       "type": "evidence",
       "text": "A rectangular dust outline on the desk shows something was removed from it.",
-      "aliases": ["dust outline", "outline on the desk", "mark on the desk", "something was taken from the desk"]
+      "aliases": [
+        "dust outline",
+        "outline on the desk",
+        "mark on the desk",
+        "something was taken from the desk"
+      ]
     },
     "ev_notebook": {
       "type": "evidence",
       "text": "Dr Marsh kept a research notebook on her desk. It is missing.",
-      "aliases": ["notebook", "research notebook", "her notebook", "the journal"]
+      "aliases": [
+        "notebook",
+        "research notebook",
+        "her notebook",
+        "the journal"
+      ]
     },
     "ev_keycard": {
       "type": "evidence",
       "text": "The dome stairwell has a keycard reader that logs every entry and exit.",
-      "aliases": ["keycard", "keycard reader", "key card", "stairwell log", "card reader"]
+      "aliases": [
+        "keycard",
+        "keycard reader",
+        "key card",
+        "stairwell log",
+        "card reader"
+      ]
     },
     "ev_call_2204": {
       "type": "evidence",
       "text": "The emergency call was logged at 22:04 from the house line.",
-      "aliases": ["emergency call", "the call", "999 call", "called emergency", "phoned for help", "called straight away", "called it in", "rang for help", "called for help"]
+      "aliases": [
+        "emergency call",
+        "the call",
+        "999 call",
+        "called emergency",
+        "phoned for help",
+        "called straight away",
+        "called it in",
+        "rang for help",
+        "called for help"
+      ]
     },
     "ev_fuel": {
       "type": "evidence",
       "text": "Fuel has been going missing from the estate generator for months.",
-      "aliases": ["fuel", "siphoning fuel", "missing fuel", "generator fuel", "petrol"]
+      "aliases": [
+        "fuel",
+        "siphoning fuel",
+        "missing fuel",
+        "generator fuel",
+        "petrol"
+      ]
     },
     "ev_will": {
       "type": "evidence",
       "text": "Dr Marsh recently changed her will, removing her niece.",
-      "aliases": ["the will", "her will", "inheritance", "cut out of the will"]
+      "aliases": [
+        "the will",
+        "her will",
+        "inheritance",
+        "cut out of the will"
+      ]
     },
     "ev_paper": {
       "type": "evidence",
       "text": "Dr Marsh submitted a joint research paper under her name alone.",
-      "aliases": ["the paper", "research paper", "joint paper", "the publication", "our paper"]
+      "aliases": [
+        "the paper",
+        "research paper",
+        "joint paper",
+        "the publication",
+        "our paper"
+      ]
     },
-
     "loc_observatory": {
       "type": "place",
       "text": "The observatory dome, at the top of the stairwell.",
-      "aliases": ["observatory", "the dome", "upstairs", "up there", "telescope room"]
+      "aliases": [
+        "observatory",
+        "the dome",
+        "upstairs",
+        "up there",
+        "telescope room"
+      ]
     },
     "loc_greenhouse": {
       "type": "place",
       "text": "The greenhouse on the west lawn.",
-      "aliases": ["greenhouse", "glasshouse", "the plants", "potting shed"]
+      "aliases": [
+        "greenhouse",
+        "glasshouse",
+        "the plants",
+        "potting shed"
+      ]
     },
     "loc_boathouse": {
       "type": "place",
       "text": "The boathouse by the lake.",
-      "aliases": ["boathouse", "boat house", "by the lake", "the jetty"]
+      "aliases": [
+        "boathouse",
+        "boat house",
+        "by the lake",
+        "the jetty"
+      ]
     },
     "loc_east_hall": {
       "type": "place",
       "text": "The east hall, the main corridor into the house.",
-      "aliases": ["east hall", "the hall", "the corridor", "hallway"]
+      "aliases": [
+        "east hall",
+        "the hall",
+        "the corridor",
+        "hallway"
+      ]
     },
     "loc_study": {
       "type": "place",
       "text": "The ground floor study.",
-      "aliases": ["study", "the office", "downstairs"]
+      "aliases": [
+        "study",
+        "the office",
+        "downstairs"
+      ]
     },
-
     "per_marsh": {
       "type": "person",
       "text": "Dr Elena Marsh, the victim.",
-      "aliases": ["Elena Marsh", "Dr Marsh", "Elena", "the victim", "my aunt", "the doctor"]
+      "aliases": [
+        "Elena Marsh",
+        "Dr Marsh",
+        "Elena",
+        "the victim",
+        "my aunt",
+        "the doctor"
+      ]
     },
     "per_rourke": {
       "type": "person",
       "text": "Thomas Rourke, the groundskeeper.",
-      "aliases": ["Rourke", "Thomas Rourke", "Thomas", "the groundskeeper"]
+      "aliases": [
+        "Rourke",
+        "Thomas Rourke",
+        "Thomas",
+        "the groundskeeper"
+      ]
     },
     "per_vance": {
       "type": "person",
       "text": "Dr Julian Vance, her research partner.",
-      "aliases": ["Vance", "Julian Vance", "Julian", "her partner", "the research partner"]
+      "aliases": [
+        "Vance",
+        "Julian Vance",
+        "Julian",
+        "her partner",
+        "the research partner"
+      ]
     },
     "per_halloway": {
       "type": "person",
       "text": "Claire Halloway, her niece.",
-      "aliases": ["Halloway", "Claire Halloway", "Claire", "the niece"]
+      "aliases": [
+        "Halloway",
+        "Claire Halloway",
+        "Claire",
+        "the niece"
+      ]
     },
-
     "time_2100": {
       "type": "time",
       "text": "21:00, the start of the window in which she died.",
-      "aliases": ["21:00", "9pm", "nine", "nine o'clock", "9:00"]
+      "aliases": [
+        "21:00",
+        "9pm",
+        "nine",
+        "nine o'clock",
+        "9:00"
+      ]
     },
     "time_2120": {
       "type": "time",
       "text": "21:20, when the rain began.",
-      "aliases": ["21:20", "9:20", "twenty past nine", "when the rain started", "the rain"]
+      "aliases": [
+        "21:20",
+        "9:20",
+        "twenty past nine",
+        "when the rain started",
+        "the rain"
+      ]
     },
     "time_2138": {
       "type": "time",
       "text": "21:38, a keycard entry to the dome stairwell.",
-      "aliases": ["21:38", "9:38", "twenty to ten"]
+      "aliases": [
+        "21:38",
+        "9:38",
+        "twenty to ten"
+      ]
     },
     "time_2146": {
       "type": "time",
       "text": "21:46, a keycard exit from the dome stairwell.",
-      "aliases": ["21:46", "9:46"]
+      "aliases": [
+        "21:46",
+        "9:46",
+        "fourteen minutes to ten",
+        "just before ten to ten"
+      ]
     },
     "time_2150": {
       "type": "time",
       "text": "21:50, when the body was discovered.",
-      "aliases": ["21:50", "9:50", "ten to ten"]
+      "aliases": [
+        "21:50",
+        "9:50",
+        "ten to ten"
+      ]
     },
     "time_2204": {
       "type": "time",
       "text": "22:04, when the emergency call was made.",
-      "aliases": ["22:04", "10:04", "just after ten"]
+      "aliases": [
+        "22:04",
+        "10:04",
+        "just after ten"
+      ]
     },
     "time_2200": {
       "type": "time",
       "text": "22:00, the end of the window in which she died.",
-      "aliases": ["22:00", "10pm", "ten", "ten o'clock"]
+      "aliases": [
+        "22:00",
+        "10pm",
+        "ten",
+        "ten o'clock"
+      ]
+    },
+    "ev_boot_prints": {
+      "type": "evidence",
+      "text": "Wet boot prints lead from the lake path into the east hall.",
+      "aliases": [
+        "boot prints",
+        "the footprints",
+        "muddy prints",
+        "tracks from the lake"
+      ]
     }
   },
-
   "public_facts": [
     "ev_counterweight",
     "ev_umbrella",
@@ -145,17 +285,57 @@
     "time_2200",
     "time_2120"
   ],
-
   "timeline": [
-    {"actor": "per_rourke",   "place": "loc_boathouse",   "from": "21:00", "to": "21:55", "verifiable_by": null},
-    {"actor": "per_vance",    "place": "loc_study",       "from": "21:00", "to": "21:35", "verifiable_by": null},
-    {"actor": "per_vance",    "place": "loc_observatory", "from": "21:38", "to": "21:46", "verifiable_by": "ev_keycard"},
-    {"actor": "per_vance",    "place": "loc_study",       "from": "21:46", "to": "22:30", "verifiable_by": null},
-    {"actor": "per_halloway", "place": "loc_east_hall",   "from": "21:00", "to": "21:48", "verifiable_by": null},
-    {"actor": "per_halloway", "place": "loc_observatory", "from": "21:50", "to": "22:00", "verifiable_by": null},
-    {"actor": "per_marsh",    "place": "loc_observatory", "from": "21:00", "to": "22:00", "verifiable_by": null}
+    {
+      "actor": "per_rourke",
+      "place": "loc_boathouse",
+      "from": "21:00",
+      "to": "21:55",
+      "verifiable_by": null
+    },
+    {
+      "actor": "per_vance",
+      "place": "loc_study",
+      "from": "21:00",
+      "to": "21:35",
+      "verifiable_by": null
+    },
+    {
+      "actor": "per_vance",
+      "place": "loc_observatory",
+      "from": "21:38",
+      "to": "21:46",
+      "verifiable_by": "ev_keycard"
+    },
+    {
+      "actor": "per_vance",
+      "place": "loc_study",
+      "from": "21:46",
+      "to": "22:30",
+      "verifiable_by": null
+    },
+    {
+      "actor": "per_halloway",
+      "place": "loc_east_hall",
+      "from": "21:00",
+      "to": "21:48",
+      "verifiable_by": null
+    },
+    {
+      "actor": "per_halloway",
+      "place": "loc_observatory",
+      "from": "21:50",
+      "to": "22:00",
+      "verifiable_by": null
+    },
+    {
+      "actor": "per_marsh",
+      "place": "loc_observatory",
+      "from": "21:00",
+      "to": "22:00",
+      "verifiable_by": null
+    }
   ],
-
   "suspects": [
     {
       "id": "rourke",
@@ -164,12 +344,20 @@
       "guilty": false,
       "persona": "You are Thomas Rourke, the groundskeeper, aged 54. You are gruff and defensive. You resent being questioned.",
       "secret": "SECRET: between 21:00 and 21:55 you were in the boathouse siphoning fuel from the estate generator to sell in the village. You have done this for months. You will NOT admit this. You will claim you were in the greenhouse repotting plants. You did not kill anyone and you never went up to the observatory.",
-      "knows": ["ev_fuel", "loc_greenhouse", "loc_boathouse", "per_rourke"],
+      "knows": [
+        "ev_fuel",
+        "loc_greenhouse",
+        "loc_boathouse",
+        "per_rourke"
+      ],
       "lies": [
         {
           "claim": "was in the greenhouse",
           "truth": "was in the boathouse",
-          "exposed_by": ["ev_fuel", "loc_boathouse"]
+          "exposed_by": [
+            "ev_boot_prints",
+            "ev_fuel"
+          ]
         }
       ]
     },
@@ -180,12 +368,23 @@
       "guilty": true,
       "persona": "You are Dr Julian Vance, aged 41, her research partner. You are controlled, precise and evasive. You never volunteer information.",
       "secret": "SECRET: you are the killer. At 21:38 you went up to the observatory to confront her about submitting your joint paper under her name alone. It became heated and you struck her with the brass counterweight, then wiped it clean. You left at 21:46. You will admit going up briefly but will claim you only left a note under her door. You will never admit the argument or the blow unless directly cornered by evidence.",
-      "knows": ["ev_paper", "loc_study", "loc_observatory", "per_vance", "time_2138", "time_2146"],
+      "knows": [
+        "ev_paper",
+        "loc_study",
+        "loc_observatory",
+        "per_vance",
+        "time_2138",
+        "time_2146"
+      ],
       "lies": [
         {
           "claim": "only left a note under the door",
           "truth": "was inside the observatory for eight minutes",
-          "exposed_by": ["ev_keycard", "time_2138", "time_2146"]
+          "exposed_by": [
+            "ev_keycard",
+            "time_2138",
+            "time_2146"
+          ]
         }
       ]
     },
@@ -196,22 +395,39 @@
       "guilty": false,
       "persona": "You are Claire Halloway, aged 29, her niece. You are nervous and you over-explain when anxious.",
       "secret": "SECRET: you found the body at 21:50. You took her research notebook from the desk because it shows she cut you out of her will. You waited fourteen minutes before calling emergency services at 22:04. You will claim you found her just before ten and called straight away. You did not kill her.",
-      "knows": ["ev_notebook", "ev_will", "loc_east_hall", "loc_observatory", "per_halloway", "time_2150", "time_2204"],
+      "knows": [
+        "ev_notebook",
+        "ev_will",
+        "loc_east_hall",
+        "loc_observatory",
+        "per_halloway",
+        "time_2150",
+        "time_2204"
+      ],
       "lies": [
         {
           "claim": "called emergency services straight away",
           "truth": "waited fourteen minutes after finding the body",
-          "exposed_by": ["ev_call_2204", "time_2150", "time_2204"]
+          "exposed_by": [
+            "ev_call_2204",
+            "time_2150",
+            "time_2204"
+          ]
         }
       ]
     }
   ],
-
   "probe_questions": [
     "Where were you between nine and ten last night?",
     "Did you go up to the observatory at any point?",
     "What do you know about her research notebook?",
     "When did you last speak to Dr Marsh?",
     "Who do you think killed her?"
-  ]
+  ],
+  "crime_scene": "loc_observatory",
+  "crime_window": {
+    "from": "21:00",
+    "to": "22:00"
+  },
+  "generated_by": "hand-written"
 }
