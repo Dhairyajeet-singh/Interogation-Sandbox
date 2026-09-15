@@ -1,3 +1,15 @@
-D:\Advanced AI Programming\Interogation Sandbox\venv
+# Virtual environments
+venv/
+.venv/
+env/
 
-venv
+# Python cache
+__pycache__/
+*.pyc
+
+# Node modules
+node_modules/
+frontend/node_modules/
+
+# Environment files
+.env

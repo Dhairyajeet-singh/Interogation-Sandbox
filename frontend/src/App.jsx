@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { api, waitJob, last } from './api.js'
 import { CaseFile, Dossier, Verdict, NewCase, Help, Machine } from './Panels.jsx'
+import LabResult, { humanDetail } from './Labresult.jsx'
 
 /* ------------------------------------------------------------------ */
 function SuspectCard ({ s, active, onSelect, onDossier }) {
@@ -23,14 +24,16 @@ function SuspectCard ({ s, active, onSelect, onDossier }) {
 }
 
 /* ------------------------------------------------------------------ */
-function Hud ({ game, file, onCase, onHelp, onNew }) {
+function Hud ({ game, file, onCase, onHelp, onNew, onDeepseek }) {
   const left = game.turns_left
   const tone = left > game.rules.turns * 0.5 ? 'ok' : left > 2 ? 'warn' : 'bad'
   return (
     <header className="hud">
       <div className="hud-left">
         <div className="title">{file.title}</div>
-        <div className="dim small">{game.rules.label} · deepseek {game.deepseek}</div>
+        <button className={`ds-badge ${game.deepseek}`} onClick={onDeepseek}>
+          {game.rules.label} · deepseek {game.deepseek}
+        </button>
       </div>
       <div className="hud-mid">
         <div className="stat-inline">
@@ -130,6 +133,20 @@ export default function App () {
     setToolOut({ name: t.name.replace('_tool', ''), ...r })
   })
 
+  // "why did it judge offline?" is miserable to answer from logs, so
+  // the badge in the HUD makes a real call and reports what happened
+  const checkDeepseek = async () => {
+    setErr(null)
+    try {
+      const d = await api('deepseek')
+      setModal(null)
+      setToolOut(null)
+      alert(d.live
+        ? `DeepSeek is live.\nkey ${d.key_prefix}… (${d.key_len} chars)\nmodel ${d.model}\nping: ${d.ping}`
+        : `DeepSeek is OFFLINE.\n\n${d.reason}\n\n${d.hint || ''}`)
+    } catch (e) { setErr(String(e.message || e)) }
+  }
+
   const accuse = (s) => run(async () => {
     const r = await api('accuse', { suspect_id: s.id })
     setModal('verdict')
@@ -145,7 +162,8 @@ export default function App () {
       <Hud game={game} file={file}
            onCase={() => setModal('case')}
            onHelp={() => setModal('help')}
-           onNew={() => setModal('new')} />
+           onNew={() => setModal('new')}
+           onDeepseek={checkDeepseek} />
 
       <div className="cols">
         <section className="room">
@@ -169,7 +187,7 @@ export default function App () {
                 <div className="row wrap outcome">
                   {reveal.band && <span className={`band ${reveal.band}`}>{reveal.band} · {reveal.score.toFixed(2)}</span>}
                   {reveal.new_facts > 0 && <span className="tag ok">+{reveal.new_facts} to the board</span>}
-                  {reveal.contradiction && <span className="tag bad">caught: {reveal.contradiction}</span>}
+                  {reveal.contradiction && <span className="tag bad">caught: {humanDetail(reveal.contradiction, state)}</span>}
                   {reveal.granted?.length > 0 && <span className="tag warn">now knows {reveal.granted.length} more</span>}
                   {reveal.new_facts === 0 && !reveal.contradiction && !reveal.granted?.length &&
                     <span className="tag dim">nothing new</span>}
@@ -237,16 +255,7 @@ export default function App () {
                   </button>
                 ))}
               </div>
-              {toolOut && (
-                <div className="toolout">
-                  <div className="row wrap">
-                    <b>{toolOut.name}</b>
-                    {toolOut.flag && <span className="tag bad">{toolOut.flag}</span>}
-                    {toolOut.new_facts > 0 && <span className="tag ok">+{toolOut.new_facts} to the board</span>}
-                  </div>
-                  <pre className="mono small">{JSON.stringify(toolOut.result, null, 2)}</pre>
-                </div>
-              )}
+              <LabResult out={toolOut} state={state} />
             </div>
           )}
 
@@ -266,11 +275,12 @@ export default function App () {
 
       {modal === 'case' && <CaseFile file={file} onClose={() => setModal(null)} />}
       {modal === 'dossier' && dossierId && (
-        <Dossier s={state.suspects.find(s => s.id === dossierId)} busy={busy} hints={hints}
+        <Dossier s={state.suspects.find(s => s.id === dossierId)} busy={busy}
+                 hints={hints} state={state}
                  onClose={() => setModal(null)} onRewind={rewind} />
       )}
       {modal === 'verdict' && (
-        <Verdict v={game.verdict} judging={judging}
+        <Verdict v={game.verdict} judging={judging} state={state}
                  onNewCase={() => setModal('new')} onClose={() => setModal(null)} />
       )}
       {modal === 'new' && (

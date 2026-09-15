@@ -26,13 +26,30 @@ at the top. Same idea as the cache format shim in cache_ops.
 """
 
 import json
+import os
 import sys
 from pathlib import Path
 
 from Extractor import FactExtractor
 from Retrieval import Timeline
 
-CASE_PATH = Path(__file__).with_name("Case_Ashfield.json")
+# Which case these tools reason over.
+#
+# This USED to be hardcoded to Case_Ashfield.json, which meant that as
+# soon as you played a generated case the lab was answering from the
+# wrong case file - movements_of returned an empty list because the
+# suspect did not exist in Ashfield. The path now comes from the client
+# that spawned us, so the lab always matches the game.
+def _case_path():
+    if "--case" in sys.argv:
+        return Path(sys.argv[sys.argv.index("--case") + 1])
+    env = os.environ.get("SANDBOX_CASE_PATH")
+    if env:
+        return Path(env)
+    return Path(__file__).with_name("Case_Ashfield.json")
+
+
+CASE_PATH = _case_path()
 
 
 # ======================================================================
@@ -204,12 +221,13 @@ def _server_class():
     return FastMCP
 
 
-def build_server(name="ashfield-forensics"):
+def build_server(name=None):
+    name = name or f"forensics-{CASE['case_id']}"
     Server = _server_class()
     try:
         app = Server(name, instructions=(
-            "Forensic tools for the Ashfield House case. Use these to "
-            "check a suspect's claims against the physical record."
+            f"Forensic tools for {CASE['title']!r}. Use these to check a "
+            f"suspect's claims against the physical record."
         ))
     except TypeError:
         app = Server(name)
@@ -304,8 +322,8 @@ def main():
         port = 8765
         if "--port" in sys.argv:
             port = int(sys.argv[sys.argv.index("--port") + 1])
-        print(f"forensics HTTP transport on http://127.0.0.1:{port}",
-              file=sys.stderr)
+        print(f"forensics HTTP transport on http://127.0.0.1:{port} "
+              f"serving {CASE['case_id']}", file=sys.stderr)
         uvicorn.run(build_http_app(), host="127.0.0.1", port=port,
                     log_level="warning")
     else:

@@ -23,6 +23,7 @@ the project has to become async.
 
 import asyncio
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -55,20 +56,37 @@ def _unwrap(result):
 class ForensicsClient:
     """Synchronous wrapper over either transport."""
 
-    def __init__(self, http=None, server_path=SERVER, python=None):
+    def __init__(self, http=None, server_path=SERVER, python=None,
+                 case_path=None):
+        """
+        case_path: which case the spawned server should reason over. The
+        game changes cases at runtime, so this cannot be baked into the
+        server - without it the lab answers from whatever file it was
+        written against.
+        """
         self.http = http.rstrip("/") if http else None
         self.server_path = str(server_path)
         self.python = python or sys.executable
+        self.case_path = str(case_path) if case_path else None
 
     # ---------------------------------------------------- stdio
     async def _with_session(self, fn):
         from mcp import ClientSession, StdioServerParameters
         from mcp.client.stdio import stdio_client
 
+        args = [self.server_path]
+        if self.case_path:
+            args += ["--case", self.case_path]
+
+        env = dict(os.environ)
+        if self.case_path:
+            env["SANDBOX_CASE_PATH"] = self.case_path
+
         params = StdioServerParameters(
             command=self.python,
-            args=[self.server_path],
+            args=args,
             cwd=str(Path(self.server_path).parent),
+            env=env,
         )
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:
@@ -148,8 +166,8 @@ class Forensics:
     so the game never hard-codes them.
     """
 
-    def __init__(self, client=None):
-        self.client = client or ForensicsClient()
+    def __init__(self, client=None, case_path=None):
+        self.client = client or ForensicsClient(case_path=case_path)
         self._names = None
 
     def available(self):

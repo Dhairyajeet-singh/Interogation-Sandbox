@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { api, waitJob, last } from './api.js'
+import { humanDetail } from './Labresult.jsx'
 
 /* ================================================================== */
 /*  Modal shell                                                        */
@@ -72,7 +73,7 @@ export function CaseFile ({ file, onClose }) {
 /* ================================================================== */
 /*  Suspect dossier                                                     */
 /* ================================================================== */
-export function Dossier ({ s, onClose, onRewind, busy, hints }) {
+export function Dossier ({ s, onClose, onRewind, busy, hints, state }) {
   const tone = s.composure > 0.6 ? 'ok' : s.composure > 0.35 ? 'warn' : 'bad'
   return (
     <Modal title={`Dossier — ${s.name}`} onClose={onClose} wide>
@@ -91,7 +92,7 @@ export function Dossier ({ s, onClose, onRewind, busy, hints }) {
             {s.pins.map((p, i) => (
               <li key={i} className={`pin ${p.kind}`}>
                 <span className="pin-kind">{p.kind}</span>
-                <span>{p.text}</span>
+                <span>{humanDetail(p.text, state)}</span>
                 {p.turn != null && <span className="dim small"> — turn {p.turn}</span>}
               </li>
             ))}
@@ -122,51 +123,105 @@ export function Dossier ({ s, onClose, onRewind, busy, hints }) {
 /* ================================================================== */
 /*  Verdict                                                             */
 /* ================================================================== */
-export function Verdict ({ v, judging, onNewCase, onClose }) {
+export function Verdict ({ v, judging, onNewCase, onClose, state }) {
+  const [tab, setTab] = useState('debrief')
+
   if (judging) {
     return (
       <Modal title="The judge is reading the transcript" onClose={() => {}}>
         <div className="judging">
           <div className="spinner" />
           <p>{judging.log?.slice(-1)[0] || 'sending transcript…'}</p>
-          <p className="dim small">deepseek-reasoner thinks before it answers. {judging.elapsed}s so far.</p>
+          <p className="dim small">{judging.elapsed}s so far.</p>
         </div>
       </Modal>
     )
   }
   if (!v) return null
+
   const cls = v.correct ? (v.evidence_backed ? 'ok' : 'warn') : 'bad'
   const headline = v.correct
     ? (v.evidence_backed ? 'CASE CLOSED' : 'RIGHT NAME, THIN CASE')
     : 'WRONG'
+  const H = (x) => humanDetail(x, state)
+
   return (
     <Modal title="Verdict" onClose={onClose} wide>
       <div className={`verdict-head ${cls}`}>
-        <div className="verdict-big">{headline}</div>
+        <div className="verdict-row">
+          <div className="verdict-big">{headline}</div>
+          <div className={`grade grade-${v.grade}`}>{v.grade}</div>
+        </div>
         <div>You accused <b>{v.accused_name}</b>. The culprit was <b>{v.culprit_name}</b>.</div>
         <div className="dim">{v.points > 0 ? '+' : ''}{v.points} pts · final score <b>{v.final_score}</b></div>
       </div>
-      <p className="brief">{v.verdict}</p>
-      {v.best_moment && <p><b>Best moment.</b> {v.best_moment}</p>}
-      <div className="grid2">
-        <div>
-          <h4>Surfaced</h4>
-          {v.contradictions_surfaced.length
-            ? <ul className="plain">{v.contradictions_surfaced.map((x, i) => <li key={i}>{x}</li>)}</ul>
-            : <p className="dim small">none</p>}
-        </div>
-        <div>
-          <h4>Missed</h4>
-          {v.contradictions_missed.length
-            ? <ul className="plain">{v.contradictions_missed.map((x, i) => <li key={i}>{x}</li>)}</ul>
-            : <p className="dim small">none</p>}
-        </div>
+
+      <p className="brief">{H(v.verdict)}</p>
+
+      <div className="tabs">
+        {['debrief', 'evidence', 'solution'].map(t => (
+          <button key={t} className={tab === t ? 'picked' : ''} onClick={() => setTab(t)}>{t}</button>
+        ))}
       </div>
-      {v.wasted_lines?.length > 0 && (
-        <><h4>Wasted lines</h4>
-          <ul className="plain">{v.wasted_lines.map((x, i) => <li key={i} className="dim">{x}</li>)}</ul></>
+
+      {tab === 'debrief' && (
+        <>
+          {v.what_went_wrong?.length > 0 && (
+            <>
+              <h4>{v.correct ? 'What was missing' : 'What went wrong'}</h4>
+              <ul className="plain">{v.what_went_wrong.map((x, i) => <li key={i}>{H(x)}</li>)}</ul>
+            </>
+          )}
+          {v.missed_opportunities?.length > 0 && (
+            <>
+              <h4>Catchable, and you moved on</h4>
+              <ul className="plain">{v.missed_opportunities.map((x, i) => <li key={i}>{H(x)}</li>)}</ul>
+            </>
+          )}
+          {v.how_to_improve?.length > 0 && (
+            <>
+              <h4>Do this next time</h4>
+              <ol className="plain advice">{v.how_to_improve.map((x, i) => <li key={i}>{H(x)}</li>)}</ol>
+            </>
+          )}
+          {v.best_moment && <p><b>Best moment.</b> {H(v.best_moment)}</p>}
+        </>
       )}
-      <div className="dim small">judged by {v.judged_by}</div>
+
+      {tab === 'evidence' && (
+        <div className="grid2">
+          <div>
+            <h4>Surfaced</h4>
+            {v.contradictions_surfaced?.length
+              ? <ul className="plain">{v.contradictions_surfaced.map((x, i) => <li key={i}>{H(x)}</li>)}</ul>
+              : <p className="dim small">You did not get a single lie out.</p>}
+          </div>
+          <div>
+            <h4>Missed</h4>
+            {v.contradictions_missed?.length
+              ? <ul className="plain">{v.contradictions_missed.map((x, i) => <li key={i}>{H(x)}</li>)}</ul>
+              : <p className="dim small">You got them all.</p>}
+          </div>
+          {v.wasted_lines?.length > 0 && (
+            <div style={{ gridColumn: '1 / -1' }}>
+              <h4>Wasted</h4>
+              <ul className="plain">{v.wasted_lines.map((x, i) => <li key={i} className="dim">{H(x)}</li>)}</ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'solution' && (
+        <>
+          <h4>How the case actually breaks</h4>
+          <p className="lab-quote">{H(v.the_solution) || 'not available'}</p>
+        </>
+      )}
+
+      <div className="dim small" style={{ marginTop: 10 }}>
+        judged by {v.judged_by}
+        {v.judged_by === 'offline' && ' — set a DeepSeek key for a proper read of your questioning'}
+      </div>
       <div className="row" style={{ marginTop: 12 }}>
         <button className="primary" onClick={onNewCase}>new case</button>
         <button onClick={onClose}>close</button>
@@ -202,6 +257,9 @@ export function NewCase ({ onClose, onLoaded, busy, setBusy, setErr }) {
       const { job: id } = await api('case/generate', { n_suspects: n, difficulty: diff })
       const j = await waitJob(id, setJob)
       if (j.status === 'failed') throw new Error(j.error)
+      if (j.result.generated_by === 'offline') {
+        setErr('That case was built locally, not by DeepSeek.')
+      }
       await api('case/load', { case_id: j.result.case_id, difficulty: diff })
       onLoaded()
     } catch (e) { setErr(String(e.message || e)) }

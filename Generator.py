@@ -448,7 +448,7 @@ class CaseGenerator:
         self.repairs = 0
         self.rejected = 0
 
-    def generate(self, n_suspects=3, seed=0, hint=""):
+    def generate(self, n_suspects=3, seed=0, hint="", require_api=False):
         """
         Produce one validated case.
 
@@ -461,6 +461,14 @@ class CaseGenerator:
                   "source": None}
 
         if self.client.offline:
+            if require_api:
+                raise RuntimeError(
+                    "DeepSeek was requested but DEEPSEEK_API_KEY is not set "
+                    "for this process, so nothing was generated. Put "
+                    "DEEPSEEK_API_KEY=sk-... in a .env file next to Api.py, "
+                    "or set the environment variable and open a NEW "
+                    "terminal. (Falling back would have handed you a "
+                    "locally-built case that looks generated but is not.)")
             case = offline_case(n_suspects, seed)
             errs = validate(case)
             if errs:

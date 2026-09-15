@@ -15,6 +15,10 @@ Design decisions, all established by the stage 0 experiments:
   - decode() supports temperature, because stage 7 ties a suspect's
     composure to how erratic their speech becomes. temperature=0 is
     greedy and fully deterministic, which stage 5 needs for stable scores.
+  - decode() also applies a repetition penalty and an n-gram block
+    against the prompt. Small models otherwise echo the question back
+    with the pronouns flipped; both fixes are deterministic, so greedy
+    decoding stays reproducible.
 """
 
 from __future__ import annotations
@@ -313,25 +317,87 @@ def prefill(model, ids: torch.Tensor, cache: Cache | None = None,
     return normalise(out.past_key_values), out.logits
 
 
-def _pick_token(logits, temperature, generator=None):
+def _apply_repetition_penalty(logits, seen_ids, penalty):
+    """
+    Push down tokens that have already appeared.
+
+    Small models echo the question back with the pronouns flipped - ask
+    "you were at the observatory at 21:38?" and get "I was at the
+    observatory at 21:38." Dividing the score of every token already in
+    the context makes that path expensive, and the model finds something
+    of its own to say instead.
+
+    Deterministic, so greedy decoding stays reproducible - stage 5's
+    scores depend on that.
+    """
+    if penalty <= 1.0 or not seen_ids:
+        return logits
+    ids = torch.tensor(sorted(set(seen_ids)), device=logits.device,
+                       dtype=torch.long)
+    picked = logits.index_select(-1, ids)
+    # positive scores shrink, negative scores grow more negative
+    adjusted = torch.where(picked > 0, picked / penalty, picked * penalty)
+    return logits.index_copy(-1, ids, adjusted)
+
+
+def _blocked_by_ngram(seen_ids, produced, n):
+    """
+    Token ids that would complete an n-gram already present.
+
+    This is the hard stop on verbatim echo: if the last n-1 tokens match
+    somewhere earlier, whatever followed there is banned. The model
+    cannot repeat a phrase from the question even if it wants to.
+    """
+    if n <= 0:
+        return set()
+    history = list(seen_ids) + list(produced)
+    if len(history) < n:
+        return set()
+    prefix = tuple(history[-(n - 1):]) if n > 1 else ()
+    banned = set()
+    for i in range(len(history) - n + 1):
+        if tuple(history[i:i + n - 1]) == prefix:
+            banned.add(history[i + n - 1])
+    return banned
+
+
+def _pick_token(logits, temperature, generator=None, top_p=0.9, top_k=50):
     """
     Choose the next token.
 
     temperature == 0  -> greedy (argmax). Fully deterministic, which is
                          what stage 5 needs for reproducible scores.
-    temperature > 0   -> sample from the softened distribution. Stage 7
-                         raises this as a suspect's composure drops.
+    temperature > 0   -> nucleus sampling. Stage 7 raises this as a
+                         suspect's composure drops, and top_p/top_k keep
+                         a rattled suspect incoherent rather than random.
     """
-    last = logits[:, -1, :]
+    last = logits[:, -1, :] if logits.dim() == 3 else logits
     if temperature <= 0.0:
         return last.argmax(-1, keepdim=True)
-    probs = torch.softmax(last.float() / temperature, dim=-1)
+
+    scaled = last.float() / temperature
+
+    if top_k and top_k < scaled.shape[-1]:
+        kth = scaled.topk(top_k, dim=-1).values[..., -1, None]
+        scaled = scaled.masked_fill(scaled < kth, float("-inf"))
+
+    if top_p and top_p < 1.0:
+        ordered, idx = scaled.sort(descending=True, dim=-1)
+        cum = torch.softmax(ordered, dim=-1).cumsum(dim=-1)
+        drop = cum - torch.softmax(ordered, dim=-1) > top_p
+        ordered = ordered.masked_fill(drop, float("-inf"))
+        scaled = scaled.scatter(-1, idx, ordered)
+
+    probs = torch.softmax(scaled, dim=-1)
     return torch.multinomial(probs, num_samples=1, generator=generator)
 
 
 def decode(model, tokenizer, cache: Cache, logits: torch.Tensor,
            max_tokens: int = 40, temperature: float = 0.0,
-           seed: int | None = None, stop_ids: tuple | None = None):
+           seed: int | None = None, stop_ids: tuple | None = None,
+           context_ids=None, repetition_penalty: float = 1.15,
+           no_repeat_ngram: int = 4, echo_window: int = 160,
+           top_p: float = 0.9, top_k: int = 50):
     """
     Generate from the current cache, one token at a time.
 
@@ -361,8 +427,21 @@ def decode(model, tokenizer, cache: Cache, logits: torch.Tensor,
                 candidates.append(tid)
         stop_ids = tuple(t for t in candidates if t is not None)
 
-    nxt = _pick_token(logits, temperature, generator)
+    # the tail of the prompt is what small models echo, so that is what
+    # the penalty and the n-gram block are aimed at
+    seen = list(context_ids[-echo_window:]) if context_ids else []
+
+    def choose(lg, produced):
+        lg = lg[:, -1, :] if lg.dim() == 3 else lg
+        lg = _apply_repetition_penalty(lg, seen + produced, repetition_penalty)
+        banned = _blocked_by_ngram(seen, produced, no_repeat_ngram)
+        if banned:
+            ids = torch.tensor(sorted(banned), device=lg.device, dtype=torch.long)
+            lg = lg.index_fill(-1, ids, float("-inf"))
+        return _pick_token(lg, temperature, generator, top_p, top_k)
+
     produced: list[int] = []
+    nxt = choose(logits, produced)
 
     for _ in range(max_tokens):
         if nxt.item() in stop_ids:
@@ -379,7 +458,7 @@ def decode(model, tokenizer, cache: Cache, logits: torch.Tensor,
                 use_cache=True,
             )
         cache = normalise(out.past_key_values)
-        nxt = _pick_token(out.logits, temperature, generator)
+        nxt = choose(out.logits, produced)
 
     COUNTER.decode(len(produced))
     return tokenizer.decode(produced), cache, produced

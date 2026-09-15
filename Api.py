@@ -31,6 +31,7 @@ WHAT DEEPSEEK DOES HERE
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 import uuid
@@ -47,7 +48,7 @@ from pydantic import BaseModel
 import Branching
 import cache_ops as co
 import Interrogation
-from Deepseek import Deepseek, have_key
+from Deepseek import Deepseek, have_key, key_source, ENV_FILE
 from Extractor import FactExtractor
 from Generator import CaseGenerator, validate
 from Judge import CaseJudge
@@ -112,7 +113,9 @@ def library():
 def load_case_by_id(case_id):
     for entry in library():
         if entry["case_id"] == case_id:
-            return json.loads(Path(entry["path"]).read_text(encoding="utf-8"))
+            case = json.loads(Path(entry["path"]).read_text(encoding="utf-8"))
+            case["_path"] = entry["path"]
+            return case
     raise HTTPException(404, f"no case {case_id!r} in the library")
 
 
@@ -168,7 +171,9 @@ class World:
         self.tok, self.model, self.device = load_model()
         self.case = None
         self.difficulty = "normal"
-        self.load(json.loads(HAND_CASE.read_text(encoding="utf-8")), "normal")
+        hand = json.loads(HAND_CASE.read_text(encoding="utf-8"))
+        hand["_path"] = str(HAND_CASE)
+        self.load(hand, "normal")
 
     # ---------------------------------------------------- setup
     def load(self, case, difficulty="normal"):
@@ -180,6 +185,7 @@ class World:
             raise HTTPException(400, f"case is not playable: {errs[:3]}")
 
         self.case = case
+        self.case_path = case.get("_path") or str(HAND_CASE)
         self.difficulty = difficulty
         self.rules = DIFFICULTY[difficulty]
 
@@ -228,9 +234,16 @@ class World:
         return self.suspects[sid]
 
     def tools(self):
+        """
+        The forensic server is spawned with the CURRENT case. Loading a
+        new case drops the old client, so the lab can never end up
+        answering from a different case than the one being played -
+        which it did, silently, returning empty results.
+        """
         if self.forensics is None:
             from Mcp_client import ForensicsClient, Forensics
-            self.forensics = Forensics(ForensicsClient())
+            self.forensics = Forensics(
+                ForensicsClient(case_path=self.case_path))
         return self.forensics
 
     # ---------------------------------------------------- game rules
@@ -294,8 +307,21 @@ async def lifespan(app: FastAPI):
     global WORLD
     WORLD = World()
     print(f"ready: {WORLD.case['title']}, {len(WORLD.suspects)} suspects, "
-          f"{WORLD.n_shared} shared tokens on {WORLD.device}, "
-          f"deepseek={'live' if have_key() else 'OFFLINE'}")
+          f"{WORLD.n_shared} shared tokens on {WORLD.device}")
+    if have_key():
+        key = os.environ["DEEPSEEK_API_KEY"].strip()
+        print(f"deepseek: LIVE (key {key[:6]}...{key[-4:]}, "
+              f"{len(key)} chars) - generation and judging will call "
+              f"deepseek-reasoner")
+    else:
+        print("deepseek: OFFLINE - no key visible to this process.\n"
+              f"  Easiest fix: create {ENV_FILE.name} next to Api.py with\n"
+              "      DEEPSEEK_API_KEY=sk-...\n"
+              f"  (expected at {ENV_FILE})\n"
+              "  Then restart. 'generate with DeepSeek' will refuse rather "
+              "than quietly build a case locally; the judge still gives a "
+              "full debrief without a key.\n"
+              "  Check any time: GET /api/deepseek")
     yield
 
 
@@ -399,6 +425,7 @@ def game_json():
         "accusation": WORLD.accusation, "verdict": WORLD.verdict,
         "judge_job": WORLD.judge_job,
         "deepseek": "live" if have_key() else "offline",
+        "key_source": key_source(),
         "contradictions_found": len(WORLD.session.hits),
         "contradictions_available": sum(
             len(s.get("lies", [])) for s in WORLD.case["suspects"]),
@@ -442,6 +469,9 @@ class GenerateReq(BaseModel):
     n_suspects: int = 3
     difficulty: str = "normal"
     hint: str = ""
+    # default False: pressing "generate with DeepSeek" must produce
+    # DeepSeek or an error, never a locally-built case that looks the same
+    allow_offline: bool = False
 
 
 # ======================================================================
@@ -474,6 +504,37 @@ def manual():
 # case library and generation
 # ======================================================================
 
+@app.get("/api/deepseek")
+def deepseek_status():
+    """
+    Is the key actually visible to THIS process, and does it work?
+
+    Diagnosing "why did it judge offline" by reading logs is miserable,
+    so this makes one real call and reports exactly what happened.
+    """
+    key = os.environ.get("DEEPSEEK_API_KEY", "").strip()
+    if not key:
+        return {"live": False,
+                "reason": "No DeepSeek key is visible to this process.",
+                "hint": f"Create a file called .env next to Api.py "
+                        f"containing DEEPSEEK_API_KEY=sk-... and restart. "
+                        f"Expected at: {ENV_FILE}",
+                "env_file": str(ENV_FILE), "env_file_exists": ENV_FILE.exists()}
+
+    info = {"key_prefix": key[:6], "key_len": len(key),
+            "model": "deepseek-reasoner", "key_source": key_source()}
+    try:
+        client = Deepseek(verbose=False)
+        raw = client.chat("Reply with JSON only.",
+                          'Return {"pong": true} and nothing else.')
+        ok = json.loads(__import__("Deepseek").strip_json(raw)).get("pong") is True
+        return {"live": True, "ping": "ok" if ok else f"odd reply: {raw[:80]}",
+                **info}
+    except Exception as exc:
+        return {"live": False, "reason": f"the key is set but the call "
+                f"failed: {exc}", **info}
+
+
 @app.get("/api/cases")
 def list_cases():
     return {"cases": library(), "current": WORLD.case["case_id"],
@@ -496,21 +557,34 @@ def generate_case(req: GenerateReq):
     if not 2 <= req.n_suspects <= 8:
         raise HTTPException(400, "n_suspects must be 2-8")
     difficulty = req.difficulty
-    n, hint = req.n_suspects, req.hint
+    n, hint, allow_offline = req.n_suspects, req.hint, req.allow_offline
 
     def work(log):
         client = Deepseek(verbose=False)
-        log("offline mode - no DEEPSEEK_API_KEY" if client.offline
-            else f"asking {client.model} for a {n}-suspect case")
+        if client.offline and not allow_offline:
+            raise RuntimeError(
+                "No DeepSeek key, so nothing was generated.\n\n"
+                f"Put this in a file called .env next to Api.py:\n"
+                f"    DEEPSEEK_API_KEY=sk-...\n"
+                f"(expected at {ENV_FILE})\n\n"
+                "Then restart the server. Falling back would have handed "
+                "you a locally-built case that looks generated but is not.")
+        msg = ("offline builder (explicitly allowed)" if client.offline
+               else f"asking {client.model} for a {n}-suspect case")
+        print(f"[generate] {msg}")
+        log(msg)
         gen = CaseGenerator(client, verbose=False)
         seed = int(time.time()) % 100000
-        case, report = gen.generate(n_suspects=n, seed=seed, hint=hint)
+        case, report = gen.generate(n_suspects=n, seed=seed, hint=hint,
+                                    require_api=not allow_offline)
         log(f"valid after {report['calls']} call(s), "
             f"{report['repairs']} repair(s)")
         CASES_DIR.mkdir(exist_ok=True)
         path = CASES_DIR / f"{case['case_id']}.json"
         path.write_text(json.dumps(case, indent=2), encoding="utf-8")
         log(f"saved {path.name}")
+        print(f"[generate] {case['case_id']} by {case['generated_by']} "
+              f"in {report['calls']} call(s)")
         return {"case_id": case["case_id"], "title": case["title"],
                 "generated_by": case["generated_by"], "report": report,
                 "difficulty": difficulty}
@@ -749,10 +823,13 @@ def accuse(req: SuspectReq):
 
     def work(log):
         client = Deepseek(verbose=False)
-        log("offline judge - no DEEPSEEK_API_KEY" if client.offline
-            else f"judging with {client.model}")
+        msg = ("offline judge - DEEPSEEK_API_KEY not set in this process"
+               if client.offline else f"judging with {client.model}")
+        print(f"[judge] {msg}")
+        log(msg)
         v = CaseJudge(client, verbose=False).judge(case, suspects, s.id, session)
         d = v.as_dict()
+        d["key_source"] = key_source()
         if v.correct and v.evidence_backed:
             d["points"] = SCORE["correct_backed"]
         elif v.correct:
@@ -764,6 +841,7 @@ def accuse(req: SuspectReq):
         d["accused_name"] = s.name
         d["culprit_name"] = WORLD.suspects[truth].name
         WORLD.verdict = d
+        print(f"[judge] {v.summary()} -> {d['points']:+d} pts")
         return d
 
     WORLD.judge_job = JOBS.start("judge", work)

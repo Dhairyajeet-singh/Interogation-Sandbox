@@ -36,9 +36,40 @@ import json
 import os
 import re
 import time
+from pathlib import Path
 
 DEFAULT_MODEL = "deepseek-reasoner"
 BASE_URL = "https://api.deepseek.com"
+ENV_FILE = Path(__file__).with_name(".env")
+
+
+def _load_env_file():
+    """
+    Read DEEPSEEK_API_KEY from a .env file next to this one.
+
+    Environment variables are the usual way, but on Windows they are a
+    reliable source of confusion: setx only affects NEW shells, a venv
+    launched from the old shell never sees it, and an IDE may start the
+    process with a different environment again. A file sitting beside
+    Api.py has none of those failure modes.
+
+        DEEPSEEK_API_KEY=sk-...
+
+    A real environment variable still wins if one is set.
+    """
+    if not ENV_FILE.exists():
+        return
+    for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        key, val = key.strip(), val.strip().strip('"').strip("'")
+        if key and val and not os.environ.get(key):
+            os.environ[key] = val
+
+
+_load_env_file()
 
 
 class DeepseekError(RuntimeError):
@@ -47,6 +78,13 @@ class DeepseekError(RuntimeError):
 
 def have_key() -> bool:
     return bool(os.environ.get("DEEPSEEK_API_KEY", "").strip())
+
+
+def key_source() -> str:
+    """Where the key came from, for diagnostics."""
+    if not have_key():
+        return "none"
+    return ".env file" if ENV_FILE.exists() else "environment variable"
 
 
 def strip_json(text: str) -> str:
@@ -144,16 +182,25 @@ class Deepseek:
                     continue
         raise DeepseekError(f"failed after {self.max_retries} attempts: {last}")
 
-    def chat_json(self, system: str, user: str, fallback=None, **kw):
+    def chat_json(self, system: str, user: str, fallback=None,
+                  require=False, **kw):
         """
         chat() that parses the reply as JSON.
 
-        If we are offline, or the call fails, and a fallback callable was
-        supplied, use it. Returns (data, source) where source is
-        "deepseek-..." or "offline", so callers can stamp their output
-        honestly.
+        require=True means do NOT fall back. When the user explicitly
+        asked for DeepSeek, quietly handing back something a local
+        function made is worse than failing - they cannot tell the
+        difference, and they end up believing the model produced it.
+
+        Returns (data, source) where source names the model or "offline".
         """
         if self.offline:
+            if require:
+                raise DeepseekError(
+                    "DEEPSEEK_API_KEY is not set for this process, so no "
+                    "call was made. Put DEEPSEEK_API_KEY=sk-... in a .env "
+                    "file next to Api.py, or set the environment variable "
+                    "and start a NEW terminal.")
             if fallback is None:
                 raise DeepseekError("offline and no fallback supplied")
             return fallback(), "offline"
@@ -162,8 +209,8 @@ class Deepseek:
             raw = self.chat(system, user, **kw)
             return json.loads(strip_json(raw)), self.model
         except Exception as exc:
-            if fallback is None:
-                raise
+            if require or fallback is None:
+                raise DeepseekError(f"the call to {self.model} failed: {exc}")
             if self.verbose:
                 print(f"[deepseek] falling back offline: {exc}")
             return fallback(), "offline"

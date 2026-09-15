@@ -281,6 +281,8 @@ class Suspect:
         answer, new_cache, produced = co.decode(
             self.model, self.tok, new_cache, logits,
             max_tokens=max_tokens, temperature=temperature, seed=seed,
+            # hand over the prompt so the decoder knows what NOT to echo
+            context_ids=wanted,
         )
         answer = answer.strip()
 
