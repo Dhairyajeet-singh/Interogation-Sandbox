@@ -30,6 +30,7 @@ special cases of that one rule.
 import torch
 
 import cache_ops as co
+from Snapshots import SnapshotStore
 
 
 # ======================================================================
@@ -134,13 +135,17 @@ class Turn:
     """One question and answer, plus the cache state that preceded it."""
 
     def __init__(self, index, question, answer, ids_before,
-                 retrieved, snapshot):
+                 retrieved, snapshot=None, snapshot_key=None,
+                 composure_before=None, granted=None):
         self.index = index
         self.question = question
         self.answer = answer
         self.ids_before = list(ids_before)
         self.retrieved = list(retrieved or [])
-        self.snapshot = snapshot        # cache as it was BEFORE this turn
+        self.snapshot = snapshot          # legacy direct cache, may be None
+        self.snapshot_key = snapshot_key  # stage 6: key into the SnapshotStore
+        self.composure_before = composure_before   # stage 7
+        self.granted = list(granted or [])         # stage 7: knowledge gained
 
     @property
     def cache_len_before(self):
@@ -156,10 +161,12 @@ class Turn:
 
 class Suspect:
     def __init__(self, spec, case, shared_cache, shared_ids,
-                 model, tok, device="cuda"):
+                 model, tok, device="cuda", store=None):
         """
         shared_cache / shared_ids: the prefilled common prefix and the
         token ids it was built from. Every suspect forks this.
+        store: a SnapshotStore (stage 6). One is created if not supplied,
+               with no budget, which behaves exactly as before.
         """
         self.spec = spec
         self.id = spec["id"]
@@ -173,6 +180,7 @@ class Suspect:
         self.model = model
         self.tok = tok
         self.device = device
+        self.store = store if store is not None else SnapshotStore(device=device)
 
         self.shared_block = make_shared_block(case)
         self.private_block = make_private_block(case, spec)
@@ -252,10 +260,10 @@ class Suspect:
         working = self.cache if cache is None else cache
         working_ids = self.cached_ids if cached_ids is None else cached_ids
 
-        snap = None
+        snap_key = None
         if record:
-            snap = co.snapshot(working, device="cpu",
-                               label=f"{self.id}:t{len(self.turns)}")
+            snap_key = f"{self.id}:t{len(self.turns)}"
+            self.store.put(snap_key, working)
 
         turn_block = make_turn_block(question, retrieved_lines)
         first = len(working_ids) == len(self.base_ids)
@@ -290,7 +298,8 @@ class Suspect:
                 answer=answer,
                 ids_before=working_ids,
                 retrieved=retrieved_lines,
-                snapshot=snap,
+                snapshot_key=snap_key,
+                composure_before=self.composure,
             ))
             self.cache = new_cache
             self.cached_ids = new_ids
@@ -317,10 +326,7 @@ class Suspect:
         self.cache = co.crop(self.cache, target.cache_len_before,
                              label=f"{self.id}:rewind->t{turn_index}")
         self.cached_ids = list(target.ids_before)
-
-        dropped = self.turns[turn_index:]
-        self.turns = self.turns[:turn_index]
-        return dropped
+        return self._undo_turns_from(turn_index)
 
     def rewind_last(self, n=1):
         """Drop the last n turns."""
@@ -334,18 +340,46 @@ class Suspect:
             self.cache = co.crop(self.cache, self.base_len,
                                  label=f"{self.id}:reset")
         self.cached_ids = list(self.base_ids)
-        self.turns = []
+        self._undo_turns_from(0)
+        self.knows = list(self.spec["knows"])
+        self.composure = 0.85
 
     def restore_snapshot(self, turn_index, to_device=None):
         """
         Reload a saved snapshot instead of cropping.
 
-        Same result as rewind_to, but used by stage 6 when the live cache
-        has been evicted and must come back from host RAM.
+        If the store dropped it, fall back to cropping the live cache,
+        which reaches the same state at the cost of nothing - the tokens
+        are still there. Returns the tier it came from, for the stats.
         """
         target = self.turns[turn_index]
-        self.cache = co.restore(target.snapshot,
-                                device=to_device or self.device,
-                                label=f"{self.id}:restore t{turn_index}")
+        cache = None
+        if target.snapshot_key is not None:
+            cache = self.store.get(target.snapshot_key)
+
+        if cache is None:                       # dropped: rebuild by cropping
+            cache = co.crop(self.cache, target.cache_len_before,
+                            label=f"{self.id}:rebuild t{turn_index}")
+            tier = "recomputed"
+        else:
+            tier = self.store.entries[target.snapshot_key].tier
+
+        self.cache = cache
         self.cached_ids = list(target.ids_before)
+        self._undo_turns_from(turn_index)
+        return tier
+
+    def _undo_turns_from(self, turn_index):
+        """Drop turns and any knowledge granted by them (stage 7)."""
+        dropped = self.turns[turn_index:]
+        for t in dropped:
+            for eid in t.granted:
+                if eid in self.knows:
+                    self.knows.remove(eid)
+            for key in (t.snapshot_key,):
+                if key:
+                    self.store.forget(key)
+        if dropped and dropped[0].composure_before is not None:
+            self.composure = dropped[0].composure_before
         self.turns = self.turns[:turn_index]
+        return dropped

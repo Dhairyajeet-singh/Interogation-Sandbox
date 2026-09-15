@@ -28,7 +28,7 @@ from Suspects import (Suspect, compute_shared_len, make_shared_block,
 tok, model, DEVICE = load_model()
 TOL = tolerance(model)
 
-case = json.load(open("case_ashfield.json", encoding="utf-8"))
+case = json.load(open("Case_Ashfield.json", encoding="utf-8"))
 ex = FactExtractor(case["entities"])
 tl = Timeline(case["timeline"])
 ret = HybridRetriever(case["entities"], tl)
@@ -133,20 +133,29 @@ def test_rewind_to_middle_turn():
 
 
 def test_snapshot_roundtrip():
-    """A snapshot pushed to host RAM must come back unchanged."""
+    """
+    A snapshot must come back from the store unchanged.
+
+    Stage 6 moved snapshots into a SnapshotStore, so a Turn now carries a
+    key rather than the cache itself.
+    """
     s = suspects["vance"]
     s.reset()
     s.ask("Tell me about the paper.", max_tokens=25)
 
-    snap = s.turns[0].snapshot
-    assert snap[0][0].device.type == "cpu", snap[0][0].device
+    key = s.turns[0].snapshot_key
+    assert key is not None, "the turn recorded no snapshot"
+    expected_len = s.turns[0].cache_len_before
 
-    back = co.restore(snap, device=DEVICE, label="test")
-    assert co.length(back) == s.turns[0].cache_len_before
+    back = s.store.get(key)
+    assert back is not None, "the store lost the snapshot"
+    assert co.length(back) == expected_len
 
-    s.restore_snapshot(0)
-    assert co.length(s.cache) == s.turns[0].cache_len_before if s.turns else True
-    print("  snapshot roundtrip ok (cpu -> gpu, length preserved)")
+    tier = s.restore_snapshot(0)
+    assert co.length(s.cache) == expected_len
+    assert len(s.turns) == 0
+    print(f"  snapshot roundtrip ok (tier '{tier}', "
+          f"length {expected_len} preserved)")
 
 
 def test_rewind_isolated_between_suspects():

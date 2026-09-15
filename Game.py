@@ -62,7 +62,7 @@ class GameState(TypedDict):
 class World:
     """Everything the nodes need. Built once at startup."""
 
-    def __init__(self, case_path="case_ashfield.json", auto=True):
+    def __init__(self, case_path="Case_Ashfield.json", auto=True):
         self.case = json.load(open(case_path, encoding="utf-8"))
         self.auto = auto
 

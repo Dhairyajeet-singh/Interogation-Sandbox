@@ -1,5 +1,5 @@
 """
-branching.py   -  Stage 5
+Branching.py   -  Stage 5
 -------------------------
 Three-option questioning.
 
@@ -268,8 +268,8 @@ def commit(suspect, candidate, retriever, case, max_tokens=60):
     regenerating, which means the answer the player saw is the answer
     they get - the score was not a promise about some other text.
     """
-    snap = co.snapshot(suspect.cache, device="cpu",
-                       label=f"{suspect.id}:t{len(suspect.turns)}")
+    snap_key = f"{suspect.id}:t{len(suspect.turns)}"
+    suspect.store.put(snap_key, suspect.cache)
 
     from Suspects import Turn
     suspect.turns.append(Turn(
@@ -278,7 +278,8 @@ def commit(suspect, candidate, retriever, case, max_tokens=60):
         answer=candidate.answer,
         ids_before=suspect.cached_ids,
         retrieved=candidate.retrieved,
-        snapshot=snap,
+        snapshot_key=snap_key,
+        composure_before=suspect.composure,
     ))
     suspect.cache = candidate.cache
     suspect.cached_ids = list(candidate.cached_ids)

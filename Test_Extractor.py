@@ -8,7 +8,7 @@ entity ids in each. This is the gate for stage 3b.
 import json
 from Extractor import FactExtractor, normalise
 
-case = json.load(open("case_ashfield.json", encoding="utf-8"))
+case = json.load(open("Case_Ashfield.json", encoding="utf-8"))
 ex = FactExtractor(case["entities"])
 
 # (answer text, entity ids that MUST be found)

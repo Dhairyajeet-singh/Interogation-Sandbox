@@ -13,7 +13,7 @@ import json
 from Extractor import FactExtractor
 from Retrieval import HybridRetriever, Timeline, KnowledgeChecker, HAVE_EMBEDDINGS
 
-case = json.load(open("case_ashfield.json", encoding="utf-8"))
+case = json.load(open("Case_Ashfield.json", encoding="utf-8"))
 ents = case["entities"]
 ex = FactExtractor(ents)
 tl = Timeline(case["timeline"])

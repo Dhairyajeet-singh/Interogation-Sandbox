@@ -27,7 +27,7 @@ from Suspects import (Suspect, compute_shared_len, make_shared_block,
 tok, model, DEVICE = load_model()
 TOL = tolerance(model)
 
-case = json.load(open("case_ashfield.json", encoding="utf-8"))
+case = json.load(open("Case_Ashfield.json", encoding="utf-8"))
 ex = FactExtractor(case["entities"])
 tl = Timeline(case["timeline"])
 ret = HybridRetriever(case["entities"], tl)
